@@ -69,7 +69,7 @@ function now() {
 }
 
 function safeSlug(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "app";
+  return value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "").slice(0, 48) || "app";
 }
 
 function safeDockerIdentifier(value: string, fallback: string) {
