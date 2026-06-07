@@ -1,9 +1,11 @@
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, ChatQuestionIcon } from "@hugeicons/core-free-icons";
+import { useState } from "react";
 import type { Deployment, DeploymentLog } from "../../api";
 import { DeployPlaneIcon } from "../../components/icons/deploy-plane-icon";
 import { AppIcon, StatusPill, deploymentCardClass, shellButton } from "../../components/ui/primitives";
 import { displayDeploymentStatus } from "../../lib/deployment-status";
 import { formatTime, shortSha } from "../../lib/format";
+import { DeploymentFailureExplanationModal } from "./deployment-failure-explanation-modal";
 import { DeploymentLogsPanel } from "./service-log-panels";
 import { formatBuildDuration } from "./service-format";
 
@@ -30,6 +32,9 @@ export function ServiceDeploymentsPanel({
   onDeploy: () => void;
   onAbortActiveDeployment: () => void;
 }) {
+  const [failureModalOpen, setFailureModalOpen] = useState(false);
+  const failedDeploymentSelected = activeDeployment?.status === "failed";
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
       <div className="min-h-0 overflow-y-auto pr-1 lg:w-[340px] lg:flex-none">
@@ -99,11 +104,23 @@ export function ServiceDeploymentsPanel({
                   Abort build
                 </button>
               </div>
+            ) : failedDeploymentSelected ? (
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" className={shellButton("secondary")} onClick={() => setFailureModalOpen(true)}>
+                  <AppIcon icon={ChatQuestionIcon} size={15} />
+                  What happened?
+                </button>
+              </div>
             ) : undefined
           }
           emptyLabel="Choose a deployment to inspect its build and deploy logs."
         />
       </div>
+      <DeploymentFailureExplanationModal
+        deployment={activeDeployment}
+        open={failureModalOpen && failedDeploymentSelected}
+        onClose={() => setFailureModalOpen(false)}
+      />
     </div>
   );
 }
