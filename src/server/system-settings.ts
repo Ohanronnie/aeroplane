@@ -1,5 +1,16 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  aiProviderCatalog,
+  aiProviderIds,
+  aiProviderModels,
+  aiProviderName,
+  defaultAiModel,
+  isAiProviderId,
+  isAiProviderModel,
+  type AiProviderId,
+  type AiProviderModel
+} from "../shared/ai-providers.js";
 import { config } from "./config.js";
 import { decryptSecret, encryptSecret } from "./secret-crypto.js";
 
@@ -21,6 +32,7 @@ export interface SystemSettings {
   databaseBackupsAutomaticEnabled?: boolean;
   r2?: R2Settings | null;
   dns?: DnsSettings | null;
+  ai?: AiSettings | null;
 }
 
 export interface R2Settings {
@@ -92,6 +104,37 @@ export type PublicDnsProviderSettings = {
 
 export type PublicDnsSettings = {
   providers: PublicDnsProviderSettings[];
+};
+
+export interface AiProviderSettings {
+  provider: AiProviderId;
+  apiKey: string;
+  selectedModel: string;
+  connectedAt: string;
+  updatedAt: string;
+}
+
+export type AiSettings = {
+  defaultProvider: AiProviderId | "";
+  defaultModel: string;
+  providers: Partial<Record<AiProviderId, AiProviderSettings>>;
+};
+
+export type PublicAiProviderSettings = {
+  id: AiProviderId;
+  name: string;
+  connected: boolean;
+  keySuffix: string;
+  selectedModel: string;
+  models: AiProviderModel[];
+  connectedAt: string | null;
+  updatedAt: string | null;
+};
+
+export type PublicAiSettings = {
+  defaultProvider: AiProviderId | null;
+  defaultModel: string;
+  providers: PublicAiProviderSettings[];
 };
 
 const settingsPath = resolve(config.dataDir, "system-settings.json");
@@ -193,6 +236,48 @@ function decryptDnsSettings(dns: SystemSettings["dns"]): SystemSettings["dns"] {
   return Object.keys(next).length > 0 ? next : null;
 }
 
+function normalizeAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+  if (!ai) return null;
+
+  const providers: AiSettings["providers"] = {};
+  const legacyAi = ai as Partial<AiSettings> & { activeProvider?: unknown };
+  for (const providerId of aiProviderIds) {
+    const provider = ai.providers?.[providerId];
+    if (!provider?.apiKey) continue;
+    providers[providerId] = {
+      provider: providerId,
+      apiKey: String(provider.apiKey),
+      selectedModel: isAiProviderModel(providerId, provider.selectedModel) ? provider.selectedModel : defaultAiModel(providerId),
+      connectedAt: provider.connectedAt || provider.updatedAt || "",
+      updatedAt: provider.updatedAt || provider.connectedAt || ""
+    };
+  }
+
+  const defaultProviderCandidate = ai.defaultProvider || legacyAi.activeProvider || "";
+  const defaultProvider = isAiProviderId(defaultProviderCandidate) && providers[defaultProviderCandidate] ? defaultProviderCandidate : "";
+  const fallbackDefaultModel = defaultProvider ? providers[defaultProvider]?.selectedModel ?? defaultAiModel(defaultProvider) : "";
+  const defaultModel = defaultProvider && isAiProviderModel(defaultProvider, ai.defaultModel) ? ai.defaultModel : fallbackDefaultModel;
+
+  return Object.keys(providers).length > 0 ? { defaultProvider, defaultModel, providers } : null;
+}
+
+function decryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+  const normalized = normalizeAiSettings(ai);
+  if (!normalized) return null;
+
+  const providers: AiSettings["providers"] = {};
+  for (const providerId of aiProviderIds) {
+    const provider = normalized.providers[providerId];
+    if (!provider) continue;
+    providers[providerId] = {
+      ...provider,
+      apiKey: decryptSecretField(provider.apiKey, `${aiProviderName(providerId)} API key`)
+    };
+  }
+
+  return { ...normalized, providers };
+}
+
 function encryptDnsSettings(dns: SystemSettings["dns"]): SystemSettings["dns"] {
   if (!dns) return null;
   const next: DnsSettings = {};
@@ -222,6 +307,23 @@ function encryptDnsSettings(dns: SystemSettings["dns"]): SystemSettings["dns"] {
   return Object.keys(next).length > 0 ? next : null;
 }
 
+function encryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+  const normalized = normalizeAiSettings(ai);
+  if (!normalized) return null;
+
+  const providers: AiSettings["providers"] = {};
+  for (const providerId of aiProviderIds) {
+    const provider = normalized.providers[providerId];
+    if (!provider) continue;
+    providers[providerId] = {
+      ...provider,
+      apiKey: encryptSecret(provider.apiKey)
+    };
+  }
+
+  return { ...normalized, providers };
+}
+
 function serializeSystemSettings(settings: SystemSettings): SystemSettings {
   const deploymentConcurrency = normalizeDeploymentConcurrency(settings.deploymentConcurrency);
   const databaseBackupScheduleDefaults = normalizeDatabaseBackupScheduleDefaults(
@@ -239,7 +341,8 @@ function serializeSystemSettings(settings: SystemSettings): SystemSettings {
           secretAccessKey: encryptSecret(settings.r2.secretAccessKey)
         }
       : null,
-    dns: encryptDnsSettings(settings.dns ?? null)
+    dns: encryptDnsSettings(settings.dns ?? null),
+    ai: encryptAiSettings(settings.ai ?? null)
   };
 }
 
@@ -259,7 +362,8 @@ export function getSystemSettings(): SystemSettings {
         databaseBackupScheduleDefaults,
         databaseBackupsAutomaticEnabled: backupSchedulesEnabled(databaseBackupScheduleDefaults),
         r2: decryptR2Settings(parsed.r2 ?? null),
-        dns: decryptDnsSettings(parsed.dns ?? null)
+        dns: decryptDnsSettings(parsed.dns ?? null),
+        ai: decryptAiSettings(parsed.ai ?? null)
       };
     }
   } catch (error) {
@@ -272,7 +376,8 @@ export function getSystemSettings(): SystemSettings {
     databaseBackupScheduleDefaults: scheduleDefaultsFromAutomatic(false),
     databaseBackupsAutomaticEnabled: false,
     r2: null,
-    dns: null
+    dns: null,
+    ai: null
   };
 }
 
@@ -384,5 +489,29 @@ export function publicDnsSettings(settings = getSystemSettings()): PublicDnsSett
         updatedAt: dns.spaceship?.updatedAt ?? null
       }
     ]
+  };
+}
+
+export function publicAiSettings(settings = getSystemSettings()): PublicAiSettings {
+  const ai = normalizeAiSettings(settings.ai ?? null);
+  const defaultProvider = ai?.defaultProvider && ai.providers[ai.defaultProvider] ? ai.defaultProvider : null;
+
+  return {
+    defaultProvider,
+    defaultModel: defaultProvider ? ai?.defaultModel || defaultAiModel(defaultProvider) : "",
+    providers: aiProviderCatalog.map((catalogProvider) => {
+      const providerId = catalogProvider.id;
+      const savedProvider = ai?.providers[providerId];
+      return {
+        id: providerId,
+        name: catalogProvider.name,
+        connected: Boolean(savedProvider?.apiKey),
+        keySuffix: secretSuffix(savedProvider?.apiKey ?? ""),
+        selectedModel: savedProvider?.selectedModel ?? defaultAiModel(providerId),
+        models: aiProviderModels(providerId),
+        connectedAt: savedProvider?.connectedAt ?? null,
+        updatedAt: savedProvider?.updatedAt ?? null
+      };
+    })
   };
 }
