@@ -1,3 +1,6 @@
+import type { AiProviderId, AiProviderModel } from "../shared/ai-providers";
+export type { AiProviderId, AiProviderModel } from "../shared/ai-providers";
+
 export type Framework = {
   slug: string;
   name: string;
@@ -75,6 +78,18 @@ export type DeploymentLog = {
   line: string;
   stream: string;
   createdAt: string;
+};
+
+export type DeploymentFailureExplanation = {
+  summary: string;
+  cause: string;
+  suggestedFix: string;
+  confidence: "low" | "medium" | "high";
+  commands: string[];
+  relatedLogLines: string[];
+  provider: AiProviderId;
+  providerName: string;
+  model: string;
 };
 
 export type RuntimeLog = {
@@ -183,6 +198,23 @@ export type DnsProviderStatus = {
 
 export type DnsSettingsStatus = {
   providers: DnsProviderStatus[];
+};
+
+export type AiProviderStatus = {
+  id: AiProviderId;
+  name: string;
+  connected: boolean;
+  keySuffix: string;
+  selectedModel: string;
+  models: AiProviderModel[];
+  connectedAt: null | string;
+  updatedAt: null | string;
+};
+
+export type AiSettingsStatus = {
+  defaultProvider: AiProviderId | null;
+  defaultModel: string;
+  providers: AiProviderStatus[];
 };
 
 export type DnsRecordApplyResult = {
@@ -664,6 +696,8 @@ export const api = {
   abortDeployment: (deploymentId: string) =>
     request<{ accepted: boolean }>(`/api/deployments/${deploymentId}/abort`, { method: "POST" }),
   deploymentLogs: (deploymentId: string) => request<{ logs: DeploymentLog[] }>(`/api/deployments/${deploymentId}/logs`),
+  explainDeploymentFailure: (deploymentId: string) =>
+    request<{ explanation: DeploymentFailureExplanation }>(`/api/deployments/${deploymentId}/explain-failure`, { method: "POST" }),
   upsertEnv: (serviceId: string, body: unknown) =>
     request(`/api/services/${serviceId}/env`, { method: "POST", body: JSON.stringify(body) }),
   deleteEnv: (serviceId: string, envId: string) => request(`/api/services/${serviceId}/env/${envId}`, { method: "DELETE" }),
@@ -787,6 +821,19 @@ export const api = {
     }),
   disconnectDnsProvider: (providerId: DnsProviderId) =>
     request<{ ok: boolean; dns: DnsSettingsStatus }>(`/api/system/dns/${providerId}`, { method: "DELETE" }),
+  aiSettings: () => request<{ ai: AiSettingsStatus }>("/api/system/ai"),
+  updateAiSettings: (body: { defaultProvider: AiProviderId; defaultModel?: string }) =>
+    request<{ ok: boolean; ai: AiSettingsStatus }>("/api/system/ai", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  updateAiProvider: (providerId: AiProviderId, body: { apiKey: string; selectedModel: string }) =>
+    request<{ ok: boolean; ai: AiSettingsStatus }>(`/api/system/ai/providers/${providerId}`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  disconnectAiProvider: (providerId: AiProviderId) =>
+    request<{ ok: boolean; ai: AiSettingsStatus }>(`/api/system/ai/providers/${providerId}`, { method: "DELETE" }),
   githubSettings: () => request<GitHubSettingsStatus>("/api/system/github"),
   updateGithubSettings: (body: {
     githubAccessToken?: string;
