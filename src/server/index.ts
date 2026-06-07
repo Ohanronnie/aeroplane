@@ -54,11 +54,19 @@ import { writeAndReloadCaddy } from "./caddy.js";
 import { databaseConnectionEnvSuggestionsForProject, databaseConnectionEnvSuggestionsForService, syncProjectDatabaseConnectionEnv } from "./database-service-linker.js";
 import { createUniqueSlug } from "../shared/slug.js";
 import {
+  aiProviderIdValues,
+  aiProviderName,
+  defaultAiModel,
+  isAiProviderModel,
+  type AiProviderId
+} from "../shared/ai-providers.js";
+import {
   backupSchedulesEnabled,
   configuredControlPlaneHostname,
   getSystemSettings,
   normalizeDatabaseBackupScheduleDefaults,
   normalizeDeploymentConcurrency,
+  publicAiSettings,
   publicDnsSettings,
   publicR2Settings,
   saveSystemSettings
@@ -106,6 +114,7 @@ import { importRedisDataFromRailway, importRedisDataFromUrl } from "./redis-data
 import { listDatabaseDataImports } from "./database-data-imports.js";
 import { listServiceImportSources } from "./service-import-sources.js";
 import { checkPostgresTlsActive, ensurePostgresTlsAssets, getPostgresTlsInfo } from "./postgres-tls.js";
+import { DeploymentFailureExplanationError, explainDeploymentFailure } from "./deployment-failure-ai.js";
 import {
   DOCKER_IMAGE_REPO_URL,
   dockerImageForService,
@@ -281,6 +290,15 @@ const r2ConnectionSchema = z.object({
   accessKeyId: z.string().trim().min(1),
   secretAccessKey: z.string().min(1).optional(),
   createBucket: z.boolean().optional().default(true)
+});
+const aiProviderIdSchema = z.enum(aiProviderIdValues);
+const aiProviderCredentialsSchema = z.object({
+  apiKey: z.string().optional().default(""),
+  selectedModel: z.string().trim().optional()
+});
+const aiSettingsSchema = z.object({
+  defaultProvider: aiProviderIdSchema,
+  defaultModel: z.string().trim().optional()
 });
 const dnsProviderIdSchema = z.enum(["cloudflare", "namecheap", "spaceship"]);
 const cloudflareDnsConnectionSchema = z.object({
@@ -1502,6 +1520,117 @@ app.delete("/api/system/dns/:provider", (c) => {
   return c.json({ ok: true, dns: publicDnsSettings(nextSettings) });
 });
 
+app.get("/api/system/ai", (c) => c.json({ ai: publicAiSettings() }));
+
+app.post("/api/system/ai", async (c) => {
+  const body = aiSettingsSchema.safeParse(await c.req.json());
+  if (!body.success) {
+    return jsonError(body.error.issues[0]?.message ?? "Invalid AI settings");
+  }
+
+  const settings = getSystemSettings();
+  const providers = { ...(settings.ai?.providers ?? {}) };
+  const defaultProvider = body.data.defaultProvider;
+  const providerSettings = providers[defaultProvider];
+  if (!providerSettings?.apiKey) {
+    return jsonError(`${aiProviderName(defaultProvider)} credentials must be saved before it can be set as default.`);
+  }
+
+  const defaultModel = body.data.defaultModel || providerSettings.selectedModel || defaultAiModel(defaultProvider);
+  if (!isAiProviderModel(defaultProvider, defaultModel)) {
+    return jsonError(`${defaultModel} is not a supported ${aiProviderName(defaultProvider)} model.`);
+  }
+
+  providers[defaultProvider] = { ...providerSettings, selectedModel: defaultModel };
+  const nextSettings = {
+    ...settings,
+    ai: { defaultProvider, defaultModel, providers }
+  };
+  saveSystemSettings(nextSettings);
+  return c.json({ ok: true, ai: publicAiSettings(nextSettings) });
+});
+
+app.post("/api/system/ai/providers/:provider", async (c) => {
+  if (!hasSecretKey()) {
+    return jsonError("AEROPLANE_SECRET_KEY is required before saving AI provider credentials", 409);
+  }
+
+  const provider = aiProviderIdSchema.safeParse(c.req.param("provider"));
+  if (!provider.success) {
+    return jsonError("Unsupported AI provider", 404);
+  }
+
+  const body = aiProviderCredentialsSchema.safeParse(await c.req.json());
+  if (!body.success) {
+    return jsonError(body.error.issues[0]?.message ?? "Invalid AI provider credentials");
+  }
+
+  const settings = getSystemSettings();
+  const providerId = provider.data;
+  const previous = settings.ai?.providers?.[providerId];
+  const apiKey = resolveOptionalMaskedSecret(body.data.apiKey, previous?.apiKey ?? "");
+  if (!apiKey) {
+    return jsonError(`${aiProviderName(providerId)} API key is required`);
+  }
+
+  const selectedModel = body.data.selectedModel || previous?.selectedModel || defaultAiModel(providerId);
+  if (!isAiProviderModel(providerId, selectedModel)) {
+    return jsonError(`${selectedModel} is not a supported ${aiProviderName(providerId)} model.`);
+  }
+
+  const timestamp = nowIso();
+  const providers = {
+    ...(settings.ai?.providers ?? {}),
+    [providerId]: {
+      provider: providerId,
+      apiKey,
+      selectedModel,
+      connectedAt: previous?.connectedAt ?? timestamp,
+      updatedAt: timestamp
+    }
+  };
+  const currentDefaultProvider: AiProviderId | "" = settings.ai?.defaultProvider && providers[settings.ai.defaultProvider] ? settings.ai.defaultProvider : "";
+  const currentDefaultModel =
+    currentDefaultProvider === providerId
+      ? selectedModel
+      : currentDefaultProvider
+        ? settings.ai?.defaultModel || providers[currentDefaultProvider]?.selectedModel || defaultAiModel(currentDefaultProvider)
+        : "";
+  const nextSettings = {
+    ...settings,
+    ai: {
+      defaultProvider: currentDefaultProvider,
+      defaultModel: currentDefaultModel,
+      providers
+    }
+  };
+
+  saveSystemSettings(nextSettings);
+  return c.json({ ok: true, ai: publicAiSettings(nextSettings) });
+});
+
+app.delete("/api/system/ai/providers/:provider", (c) => {
+  const provider = aiProviderIdSchema.safeParse(c.req.param("provider"));
+  if (!provider.success) {
+    return jsonError("Unsupported AI provider", 404);
+  }
+
+  const settings = getSystemSettings();
+  const providers = { ...(settings.ai?.providers ?? {}) };
+  delete providers[provider.data];
+
+  const currentDefaultProvider = settings.ai?.defaultProvider;
+  const defaultProvider: AiProviderId | "" = currentDefaultProvider && currentDefaultProvider !== provider.data && providers[currentDefaultProvider] ? currentDefaultProvider : "";
+  const defaultModel = defaultProvider ? settings.ai?.defaultModel || providers[defaultProvider]?.selectedModel || defaultAiModel(defaultProvider) : "";
+  const nextSettings = {
+    ...settings,
+    ai: Object.keys(providers).length > 0 ? { defaultProvider, defaultModel, providers } : null
+  };
+
+  saveSystemSettings(nextSettings);
+  return c.json({ ok: true, ai: publicAiSettings(nextSettings) });
+});
+
 app.get("/api/system/github", async (c) => {
   try {
     return c.json(await publicGithubSettings());
@@ -2388,6 +2517,18 @@ app.get("/api/deployments/:deploymentId/logs", (c) => {
     .orderBy(asc(deploymentLogs.id))
     .all();
   return c.json({ logs: rows });
+});
+
+app.post("/api/deployments/:deploymentId/explain-failure", async (c) => {
+  try {
+    const explanation = await explainDeploymentFailure(c.req.param("deploymentId"));
+    return c.json({ explanation });
+  } catch (error) {
+    if (error instanceof DeploymentFailureExplanationError) {
+      return jsonError(error.message, error.status);
+    }
+    return jsonError(error instanceof Error ? error.message : "Could not explain this deployment failure", 500);
+  }
 });
 
 app.get("/api/deployments/:deploymentId/stream", (c) => {
