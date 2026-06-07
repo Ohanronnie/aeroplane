@@ -1,5 +1,3 @@
-Hqh5fUhtYJU5Ud4xDpr8pZ8htNHqn9GqMT3WFBRbpump
-
 # Aeroplane
 
 Aeroplane is a self-hosted deployment control plane for running apps and databases on your own VPS. It connects to GitHub, builds projects with Railpack and BuildKit, runs services with Docker, manages environment variables, writes Caddy routes for domains, and gives you a dashboard for deployments, logs, variables, database data, backups, and system updates.
