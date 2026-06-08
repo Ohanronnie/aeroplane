@@ -696,8 +696,11 @@ export const api = {
   abortDeployment: (deploymentId: string) =>
     request<{ accepted: boolean }>(`/api/deployments/${deploymentId}/abort`, { method: "POST" }),
   deploymentLogs: (deploymentId: string) => request<{ logs: DeploymentLog[] }>(`/api/deployments/${deploymentId}/logs`),
-  explainDeploymentFailure: (deploymentId: string) =>
-    request<{ explanation: DeploymentFailureExplanation }>(`/api/deployments/${deploymentId}/explain-failure`, { method: "POST" }),
+  explainDeploymentFailure: (deploymentId: string, body?: { providerId?: AiProviderId; model?: string }) =>
+    request<{ explanation: DeploymentFailureExplanation }>(`/api/deployments/${deploymentId}/explain-failure`, {
+      method: "POST",
+      body: JSON.stringify(body ?? {})
+    }),
   upsertEnv: (serviceId: string, body: unknown) =>
     request(`/api/services/${serviceId}/env`, { method: "POST", body: JSON.stringify(body) }),
   deleteEnv: (serviceId: string, envId: string) => request(`/api/services/${serviceId}/env/${envId}`, { method: "DELETE" }),
