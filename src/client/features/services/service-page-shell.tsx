@@ -141,17 +141,20 @@ export function ServicePageShell({
   const [nowMs, setNowMs] = useState(() => Date.now());
   const lastDeploymentRefreshRef = useRef(0);
 
+  const loadSuggestionKeys = useCallback(async () => {
+    const suggs = await api.suggestionKeys(serviceId).catch(() => ({ suggestions: [], databaseVariables: [] }));
+    startTransition(() => {
+      setSuggestions(suggs.suggestions);
+    });
+  }, [serviceId]);
+
   const loadOverview = useCallback(async (options: { showLoading?: boolean } = {}) => {
     const showLoading = options.showLoading ?? true;
     if (showLoading) setOverviewLoading(true);
     try {
-      const [result, suggs] = await Promise.all([
-        api.serviceOverview(serviceId),
-        api.suggestionKeys(serviceId).catch(() => ({ suggestions: [], databaseVariables: [] }))
-      ]);
+      const result = await api.serviceOverview(serviceId);
       startTransition(() => {
         setOverview(result);
-        setSuggestions(suggs.suggestions);
         setActiveDeploymentId((current) => {
           const pendingDeployment = result.deployments.find((deployment) => deploymentIsPending(deployment.status));
           if (pendingDeployment) return pendingDeployment.id;
@@ -188,7 +191,8 @@ export function ServicePageShell({
 
   useEffect(() => {
     void loadOverview();
-  }, [loadOverview, serviceId]);
+    void loadSuggestionKeys();
+  }, [loadOverview, loadSuggestionKeys, serviceId]);
 
   useEffect(() => {
     if (!overview) return;
@@ -340,6 +344,7 @@ export function ServicePageShell({
     try {
       await action();
       await loadOverview({ showLoading: false });
+      await loadSuggestionKeys();
       await onProjectRefresh();
       if (actionRequiresRedeploy(label)) {
         setRedeployToastVisible(true);
