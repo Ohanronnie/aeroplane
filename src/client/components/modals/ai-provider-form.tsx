@@ -1,26 +1,17 @@
 import {
   Cancel01Icon,
-  CheckmarkCircle02Icon,
-  Delete02Icon,
-  PencilEdit02Icon,
-  StarIcon
+  CheckmarkCircle02Icon
 } from "@hugeicons/core-free-icons";
-import type { FormEvent } from "react";
-import { AppIcon, FieldLabel, FormInput, shellButton, statusClass } from "../ui/primitives";
+import { useEffect, useRef, type FormEvent } from "react";
+import { AppIcon, FieldLabel, FormInput, shellButton } from "../ui/primitives";
 import type {
   AiProviderConnection,
   AiProviderCredentials,
   AiProviderDefinition
 } from "./ai-settings-data";
 
-function savedLabel(savedAt: string) {
-  if (!savedAt) return "Saved in this session";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(new Date(savedAt));
+function savedKeyLabel(keySuffix: string) {
+  return keySuffix ? `Ending in ${keySuffix}` : "Saved";
 }
 
 const selectClass =
@@ -30,31 +21,42 @@ export function AiProviderForm({
   provider,
   values,
   connection,
-  isDefault,
-  editing,
   error,
   busy = false,
   onChange,
   onSave,
-  onEdit,
-  onCancel,
-  onDisconnect,
-  onSetDefault
+  onCancel
 }: {
   provider: AiProviderDefinition;
   values: AiProviderCredentials;
   connection: AiProviderConnection;
-  isDefault: boolean;
-  editing: boolean;
   error: string;
   busy?: boolean;
   onChange: (values: AiProviderCredentials) => void;
   onSave: () => void;
-  onEdit: () => void;
   onCancel: () => void;
-  onDisconnect: () => void;
-  onSetDefault: () => void;
 }) {
+  const apiKeyInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!connection.connected || values.apiKey) return;
+
+    const clearAutofilledKey = () => {
+      if (apiKeyInputRef.current?.value) {
+        apiKeyInputRef.current.value = "";
+      }
+    };
+
+    clearAutofilledKey();
+    const animationFrame = window.requestAnimationFrame(clearAutofilledKey);
+    const timeout = window.setTimeout(clearAutofilledKey, 250);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeout);
+    };
+  }, [connection.connected, provider.id, values.apiKey]);
+
   function saveCredentials(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -62,75 +64,6 @@ export function AiProviderForm({
   }
 
   const selectedModel = values.selectedModel || connection.selectedModel || provider.models[0]?.id || "";
-
-  if (connection.connected && !editing) {
-    return (
-      <section className="space-y-4 border border-zinc-800 bg-zinc-950/45 p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className={`grid h-11 w-11 shrink-0 place-items-center border ${provider.logoFrameClass}`}>
-              <img src={provider.logoUrl} alt="" className="max-h-7 max-w-8 object-contain" />
-            </div>
-            <div>
-              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">AI provider</div>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h3 className="font-hero text-lg tracking-tight text-zinc-100">{provider.name}</h3>
-                <span className={`px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${statusClass(isDefault ? "active" : "current")}`}>
-                  {isDefault ? "Default" : "Saved"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {!isDefault ? (
-              <button type="button" className={shellButton("secondary")} onClick={onSetDefault} disabled={busy}>
-                <AppIcon icon={StarIcon} size={15} />
-                Set default
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-[#4FB8B2]/45 hover:bg-[#4FB8B2]/10 hover:text-[#7fe3dd]"
-              onClick={onEdit}
-              disabled={busy}
-              title="Edit AI credentials"
-              aria-label="Edit AI credentials"
-            >
-              <AppIcon icon={PencilEdit02Icon} size={15} />
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-rose-500/45 hover:bg-rose-500/10 hover:text-rose-300"
-              onClick={onDisconnect}
-              disabled={busy}
-              title="Remove AI credentials"
-              aria-label="Remove AI credentials"
-            >
-              <AppIcon icon={Delete02Icon} size={15} />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="border border-zinc-800 bg-zinc-900/55 p-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">Model</div>
-            <div className="mt-2 truncate font-mono text-xs text-zinc-200">{connection.selectedModel}</div>
-          </div>
-          <div className="border border-zinc-800 bg-zinc-900/55 p-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">API key</div>
-            <div className="mt-2 font-mono text-xs text-zinc-200">******{connection.keySuffix}</div>
-          </div>
-          <div className="border border-zinc-800 bg-zinc-900/55 p-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">Saved</div>
-            <div className="mt-2 font-mono text-xs text-zinc-200">{savedLabel(connection.savedAt)}</div>
-          </div>
-        </div>
-
-        {error ? <div className="border border-rose-500/35 bg-rose-950/25 px-3 py-2 font-mono text-[10px] text-rose-200">{error}</div> : null}
-      </section>
-    );
-  }
 
   return (
     <form onSubmit={saveCredentials} className="space-y-4 border border-zinc-800 bg-zinc-950/45 p-5">
@@ -147,12 +80,20 @@ export function AiProviderForm({
         <div>
           <FieldLabel>API key</FieldLabel>
           <FormInput
+            ref={apiKeyInputRef}
             type="password"
+            name={`ai-api-key-${provider.id}-replacement`}
             value={values.apiKey}
             onChange={(event) => onChange({ ...values, apiKey: event.target.value })}
-            placeholder={connection.connected ? "Leave masked key or enter a new key" : provider.apiKeyPlaceholder}
-            required
-            autoComplete="off"
+            placeholder={connection.connected ? `${savedKeyLabel(connection.keySuffix)}. Enter a new key to replace it.` : provider.apiKeyPlaceholder}
+            required={!connection.connected}
+            autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            data-1p-ignore="true"
+            data-form-type="other"
+            data-lpignore="true"
           />
         </div>
         <div>
