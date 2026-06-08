@@ -300,6 +300,10 @@ const aiSettingsSchema = z.object({
   defaultProvider: aiProviderIdSchema,
   defaultModel: z.string().trim().optional()
 });
+const deploymentFailureExplanationRequestSchema = z.object({
+  providerId: aiProviderIdSchema.optional(),
+  model: z.string().trim().optional()
+});
 const dnsProviderIdSchema = z.enum(["cloudflare", "namecheap", "spaceship"]);
 const cloudflareDnsConnectionSchema = z.object({
   apiToken: z.string().optional().default(""),
@@ -1008,6 +1012,11 @@ function resolveOptionalMaskedSecret(input: string, existing = "") {
   return resolveMaskedSecret(value, existing);
 }
 
+function isExternalMaskedSecret(input: string) {
+  const value = input.trim();
+  return value.includes("*") && !value.startsWith("******");
+}
+
 function onboardingSettingsError(error: unknown) {
   return error instanceof Error ? error.message : "Could not apply onboarding settings";
 }
@@ -1568,9 +1577,17 @@ app.post("/api/system/ai/providers/:provider", async (c) => {
   const settings = getSystemSettings();
   const providerId = provider.data;
   const previous = settings.ai?.providers?.[providerId];
-  const apiKey = resolveOptionalMaskedSecret(body.data.apiKey, previous?.apiKey ?? "");
+  const submittedApiKey = body.data.apiKey.trim();
+  if (isExternalMaskedSecret(submittedApiKey)) {
+    return jsonError(`Paste the full ${aiProviderName(providerId)} API key, not a masked key.`);
+  }
+
+  const apiKey = resolveOptionalMaskedSecret(submittedApiKey, previous?.apiKey ?? "");
   if (!apiKey) {
     return jsonError(`${aiProviderName(providerId)} API key is required`);
+  }
+  if (apiKey.startsWith("******")) {
+    return jsonError(`The saved ${aiProviderName(providerId)} API key is only a mask. Paste the full API key once to repair it.`);
   }
 
   const selectedModel = body.data.selectedModel || previous?.selectedModel || defaultAiModel(providerId);
@@ -2521,7 +2538,15 @@ app.get("/api/deployments/:deploymentId/logs", (c) => {
 
 app.post("/api/deployments/:deploymentId/explain-failure", async (c) => {
   try {
-    const explanation = await explainDeploymentFailure(c.req.param("deploymentId"));
+    const body = deploymentFailureExplanationRequestSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) {
+      return jsonError(body.error.issues[0]?.message ?? "Invalid AI explanation request");
+    }
+
+    const explanation = await explainDeploymentFailure(c.req.param("deploymentId"), {
+      providerId: body.data.providerId,
+      modelId: body.data.model
+    });
     return c.json({ explanation });
   } catch (error) {
     if (error instanceof DeploymentFailureExplanationError) {
