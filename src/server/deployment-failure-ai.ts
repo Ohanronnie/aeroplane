@@ -9,7 +9,7 @@ import { createXai } from "@ai-sdk/xai";
 import { generateText, Output, type LanguageModel } from "ai";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { aiProviderName, defaultAiModel, type AiProviderId } from "../shared/ai-providers.js";
+import { aiProviderName, defaultAiModel, isAiProviderModel, type AiProviderId } from "../shared/ai-providers.js";
 import { db } from "./db.js";
 import { deploymentLogs, deployments, services, type Deployment, type DeploymentLog, type Service } from "./schema.js";
 import { getSystemSettings } from "./system-settings.js";
@@ -49,7 +49,7 @@ function modelForProvider(providerId: AiProviderId, apiKey: string, modelId: str
   if (providerId === "mistral") return createMistral({ apiKey })(modelId);
   if (providerId === "groq") return createGroq({ apiKey })(modelId);
   if (providerId === "deepseek") return createDeepSeek({ apiKey })(modelId);
-  if (providerId === "xai") return createXai({ apiKey })(modelId);
+  if (providerId === "xai") return createXai({ apiKey }).responses(modelId);
 
   return createOpenAICompatible({
     name: "moonshot",
@@ -106,7 +106,10 @@ Deployment logs:
 ${formatLogs(logs) || "No deployment logs were captured."}`;
 }
 
-export async function explainDeploymentFailure(deploymentId: string): Promise<DeploymentFailureExplanation> {
+export async function explainDeploymentFailure(
+  deploymentId: string,
+  options: { providerId?: AiProviderId; modelId?: string } = {}
+): Promise<DeploymentFailureExplanation> {
   const deployment = db.select().from(deployments).where(eq(deployments.id, deploymentId)).get();
   if (!deployment) {
     throw new DeploymentFailureExplanationError("Deployment not found.", 404);
@@ -121,7 +124,7 @@ export async function explainDeploymentFailure(deploymentId: string): Promise<De
   }
 
   const settings = getSystemSettings();
-  const providerId = settings.ai?.defaultProvider || "";
+  const providerId = options.providerId || settings.ai?.defaultProvider || "";
   if (!providerId) {
     throw new DeploymentFailureExplanationError("Choose a default AI provider in Settings before explaining deployment failures.", 409);
   }
@@ -131,14 +134,22 @@ export async function explainDeploymentFailure(deploymentId: string): Promise<De
     throw new DeploymentFailureExplanationError(`${aiProviderName(providerId)} API key is missing.`, 409);
   }
 
-  const modelId = settings.ai?.defaultModel || providerSettings.selectedModel || defaultAiModel(providerId);
+  const requestedModelId = options.modelId?.trim() || "";
+  if (requestedModelId && !isAiProviderModel(providerId, requestedModelId)) {
+    throw new DeploymentFailureExplanationError(`${requestedModelId} is not a supported ${aiProviderName(providerId)} model.`);
+  }
+
+  const defaultProviderModel = providerId === settings.ai?.defaultProvider ? settings.ai?.defaultModel || "" : "";
+  const modelId = requestedModelId || defaultProviderModel || providerSettings.selectedModel || defaultAiModel(providerId);
   const logs = db.select().from(deploymentLogs).where(eq(deploymentLogs.deploymentId, deploymentId)).orderBy(asc(deploymentLogs.id)).all();
+  const providerOptions = providerId === "xai" ? { xai: { store: false } } : undefined;
 
   const result = await generateText({
     model: modelForProvider(providerId, providerSettings.apiKey, modelId),
     temperature: 0.2,
     maxOutputTokens: 900,
     prompt: buildPrompt(deployment, service, logs),
+    providerOptions,
     output: Output.object({
       schema: deploymentFailureExplanationSchema,
       name: "deployment_failure_explanation"
