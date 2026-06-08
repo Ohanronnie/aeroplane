@@ -84,10 +84,13 @@ export const aiProviderCatalog = [
     name: "xAI",
     apiKeyPlaceholder: "xAI API key",
     models: [
-      { id: "grok-4-20", name: "Grok 4.20" },
-      { id: "grok-4", name: "Grok 4" },
+      { id: "grok-4.3", name: "Grok 4.3" },
+      { id: "grok-4.3-latest", name: "Grok 4.3 Latest" },
       { id: "grok-4-fast-reasoning", name: "Grok 4 Fast Reasoning" },
-      { id: "grok-code-fast-1", name: "Grok Code Fast 1" }
+      { id: "grok-4-fast-non-reasoning", name: "Grok 4 Fast Non-reasoning" },
+      { id: "grok-4-1-fast-reasoning", name: "Grok 4.1 Fast Reasoning" },
+      { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast Non-reasoning" },
+      { id: "grok-build-0.1", name: "Grok Build 0.1" }
     ]
   },
   {
