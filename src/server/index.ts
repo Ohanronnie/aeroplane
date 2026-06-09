@@ -123,6 +123,7 @@ import {
   validateDockerImageReference
 } from "../shared/service-source.js";
 import { isWorkerService, normalizeServiceRuntimeMode, serviceRuntimeModes } from "../shared/service-runtime.js";
+import { projectActivityTimestamp, sortProjectsByRecentActivity } from "./project-activity.js";
 
 const app = new Hono();
 
@@ -683,10 +684,7 @@ async function summarizeProject(project: ProjectGroup, projectServices: Service[
         ? "active"
         : "idle";
 
-  const lastUpdatedAt = [...projectServices]
-    .map((service) => service.lastDeployedAt ?? service.updatedAt)
-    .sort()
-    .at(-1) ?? project.updatedAt;
+  const lastUpdatedAt = projectActivityTimestamp(project, projectServices);
 
   return {
     id: project.id,
@@ -1763,7 +1761,7 @@ app.get("/api/projects", async (c) => {
   const serviceRows = db.select().from(services).orderBy(asc(services.name)).all();
 
   const grouped = await Promise.all(groups.map((group) => summarizeProject(group, serviceRows.filter((service) => service.projectId === group.id))));
-  return c.json({ projects: grouped });
+  return c.json({ projects: sortProjectsByRecentActivity(grouped) });
 });
 
 app.post("/api/projects", async (c) => {
