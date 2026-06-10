@@ -236,6 +236,30 @@ export type SystemSettings = {
   databaseBackupsAutomaticEnabled?: boolean;
 };
 
+export type ApiKeyAccessLevel = "read" | "write";
+export type ApiKeyProjectScope = "all" | "selected";
+export type ApiKeyExpiryDays = 7 | 30 | 90 | null;
+
+export type ApiKeySummary = {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  accessLevel: ApiKeyAccessLevel;
+  projectScope: ApiKeyProjectScope;
+  projectIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt: null | string;
+  expiresAt: null | string;
+  revokedAt: null | string;
+};
+
+export type ApiKeyProjectOption = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
 export type DatabaseBackup = {
   id: string;
   serviceId: string;
@@ -803,6 +827,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body)
     }),
+  apiKeys: () => request<{ apiKeys: ApiKeySummary[]; projects: ApiKeyProjectOption[] }>("/api/system/api-keys"),
+  createApiKey: (body: {
+    name: string;
+    accessLevel: ApiKeyAccessLevel;
+    projectScope: ApiKeyProjectScope;
+    projectIds: string[];
+    expiresInDays: ApiKeyExpiryDays;
+  }) =>
+    request<{ apiKey: ApiKeySummary; token: string }>("/api/system/api-keys", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  revokeApiKey: (apiKeyId: string) => request<{ ok: boolean }>(`/api/system/api-keys/${apiKeyId}`, { method: "DELETE" }),
   r2Settings: () => request<{ r2: R2SettingsStatus }>("/api/system/r2"),
   updateR2Settings: (body: {
     accountId: string;
