@@ -17,6 +17,7 @@ It currently supports:
 - Environment variable management.
 - PostgreSQL, Redis, and MongoDB services.
 - Database browsing, editing, SQL console support where applicable, and backups.
+- Scoped API keys for programmatic access to project and service endpoints.
 
 ## Installation
 
@@ -120,6 +121,21 @@ https://YOUR_PUBLIC_HOST/api/github/app/webhook
 ```
 
 The app details can be entered during onboarding or later in system settings.
+
+## API Access
+
+Create API keys from System Settings -> API Access.
+
+Keys can be read-only or read/write, scoped to all projects or specific projects, and set to expire after 7, 30, or 90 days, or never expire.
+
+Use API keys with bearer authentication:
+
+```bash
+curl "$AEROPLANE_URL/api/projects" \
+  -H "Authorization: Bearer $AEROPLANE_API_KEY"
+```
+
+API keys use the same `/api/*` endpoints as the dashboard. Sensitive system settings and key management remain browser-session only.
 
 ## Domains
 
