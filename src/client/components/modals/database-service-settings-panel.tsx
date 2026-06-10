@@ -16,7 +16,7 @@ type DatabaseServiceSettingsPanelProps = {
   settings: DatabaseSettingsState;
   hostPort?: number;
   supportsLogicalReplication?: boolean;
-  onChange: (settings: DatabaseSettingsState) => void;
+  onChange: (settings: Partial<DatabaseSettingsState>) => void;
 };
 
 export function DatabaseServiceSettingsPanel({ settings, hostPort, supportsLogicalReplication = false, onChange }: DatabaseServiceSettingsPanelProps) {
@@ -39,23 +39,25 @@ export function DatabaseServiceSettingsPanel({ settings, hostPort, supportsLogic
 
   useEffect(() => {
     if (!generatedHostname || settings.databasePublicHostname === generatedHostname) return;
-    onChange({ ...settings, databasePublicHostname: generatedHostname });
-  }, [generatedHostname, settings, onChange]);
+    onChange({ databasePublicHostname: generatedHostname });
+  }, [generatedHostname, settings.databasePublicHostname, onChange]);
 
   return (
     <>
       <div>
         <FieldLabel>Service name</FieldLabel>
-        <FormInput value={settings.name} onChange={(event) => onChange({ ...settings, name: event.target.value })} />
+        <FormInput name="name" value={settings.name} onChange={(event) => onChange({ name: event.target.value })} />
       </div>
       <div>
         <FieldLabel>Database port (Internal)</FieldLabel>
         <FormInput
+          name="internalPort"
           type="number"
           value={settings.internalPort}
-          onChange={(event) => onChange({ ...settings, internalPort: Number(event.target.value) })}
+          onChange={(event) => onChange({ internalPort: Number(event.target.value) })}
         />
       </div>
+      <input type="hidden" name="databasePublicHostname" value={settings.databasePublicHostname || generatedHostname} />
       <div className="xl:col-span-2">
         <div className="grid gap-4 border border-zinc-800 bg-zinc-950/35 p-4 md:grid-cols-2">
           <div>
@@ -82,7 +84,7 @@ export function DatabaseServiceSettingsPanel({ settings, hostPort, supportsLogic
             <Checkbox
               checked={settings.postgresLogicalReplicationEnabled}
               label="Logical replication enabled"
-              onChange={(checked) => onChange({ ...settings, postgresLogicalReplicationEnabled: checked })}
+              onChange={(checked) => onChange({ postgresLogicalReplicationEnabled: checked })}
               className="items-start"
             >
               <span className="grid gap-1">
