@@ -156,6 +156,28 @@ export const authSessions = sqliteTable("auth_sessions", {
   expiresAt: text("expires_at").notNull()
 });
 
+export const apiKeys = sqliteTable("api_keys", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  tokenPrefix: text("token_prefix").notNull(),
+  accessLevel: text("access_level").notNull(),
+  projectScope: text("project_scope").notNull(),
+  createdByUserId: text("created_by_user_id").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  lastUsedAt: text("last_used_at"),
+  expiresAt: text("expires_at"),
+  revokedAt: text("revoked_at")
+});
+
+export const apiKeyProjectScopes = sqliteTable("api_key_project_scopes", {
+  id: text("id").primaryKey(),
+  apiKeyId: text("api_key_id").notNull(),
+  projectId: text("project_id").notNull(),
+  createdAt: text("created_at").notNull()
+});
+
 export type ProjectGroup = typeof projectGroups.$inferSelect;
 export type Service = typeof services.$inferSelect;
 export type Deployment = typeof deployments.$inferSelect;
@@ -169,3 +191,5 @@ export type DatabaseBackupSettings = typeof databaseBackupSettings.$inferSelect;
 export type DatabaseDataImport = typeof databaseDataImports.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type AuthSession = typeof authSessions.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type ApiKeyProjectScope = typeof apiKeyProjectScopes.$inferSelect;
