@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { db, nowIso } from "./db.js";
 import { authSessions, users, type User } from "./schema.js";
 import { configuredControlPlaneHostname } from "./system-settings.js";
+import { apiKeyTokenFromRequest, authenticateApiKeyToken, type AuthenticatedApiKey } from "./api-keys.js";
 
 const sessionCookie = "aeroplane_session";
 const sessionDays = 30;
@@ -19,6 +20,12 @@ export type PublicUser = {
   role: string;
 };
 
+export type AuthContext =
+  | { type: "session"; user: PublicUser }
+  | { type: "api-key"; apiKey: AuthenticatedApiKey };
+
+const authContexts = new WeakMap<Request, AuthContext>();
+
 export function publicUser(user: User): PublicUser {
   return {
     id: user.id,
@@ -26,6 +33,14 @@ export function publicUser(user: User): PublicUser {
     email: user.email,
     role: user.role
   };
+}
+
+function setAuthContext(c: Context, auth: AuthContext) {
+  authContexts.set(c.req.raw, auth);
+}
+
+export function getAuthContext(c: Context) {
+  return authContexts.get(c.req.raw) ?? null;
 }
 
 function cookieOptions() {
@@ -223,10 +238,22 @@ export async function requireAuth(c: Context, next: Next) {
     return c.json({ error: "Setup required", setupRequired: true }, 401);
   }
 
+  const apiKeyToken = apiKeyTokenFromRequest(c);
+  if (apiKeyToken) {
+    const apiKey = authenticateApiKeyToken(apiKeyToken);
+    if (!apiKey) {
+      return c.json({ error: "Invalid or expired API key" }, 401);
+    }
+    setAuthContext(c, { type: "api-key", apiKey });
+    await next();
+    return;
+  }
+
   const user = getCurrentUser(c);
   if (!user) {
     return c.json({ error: "Authentication required" }, 401);
   }
+  setAuthContext(c, { type: "session", user });
 
   if (!trustedOrigin(c)) {
     return c.json({ error: "Request origin is not allowed" }, 403);
