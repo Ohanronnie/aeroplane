@@ -19,7 +19,7 @@ import { config } from "./config.js";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
 import { abortDeployment, allocateHostPort, containerNameForService, enqueueDeployment, getServiceById, removeServiceRuntime, startDeployWorker, staticSiteDirForService } from "./deploy.js";
 import { db, nowIso } from "./db.js";
-import { detectFramework } from "./frameworks.js";
+import { detectFramework, detectFrameworkPreview } from "./frameworks.js";
 import { frameworkIconAsset, frameworkIconUrl, prewarmFrameworkIconCache } from "./framework-icons.js";
 import { DATABASE_ICON_CATALOG, FRAMEWORK_ICON_CATALOG } from "./framework-icon-catalog.js";
 import { envExampleVariableSuggestions } from "./env-example-suggestions.js";
@@ -594,7 +594,15 @@ function urlForHostname(hostname: string) {
   return `${isIpv4Address ? "http" : "https"}://${hostname}`;
 }
 
-async function publicService(service: Service) {
+type PublicServiceOptions = {
+  frameworkDetection?: "full" | "preview";
+  includeDomains?: boolean;
+  liveChecks?: boolean;
+};
+
+async function publicService(service: Service, options: PublicServiceOptions = {}) {
+  const liveChecks = options.liveChecks ?? true;
+  const includeDomains = options.includeDomains ?? true;
   const normalizedService = ensureDatabasePublicDefaults(service) ?? service;
   const isDatabase = isDatabaseService(normalizedService);
   const isDockerImage = isDockerImageService(normalizedService);
@@ -603,14 +611,16 @@ async function publicService(service: Service) {
   service = normalizedService;
   const appPort = service.activePort ?? service.hostPort;
   const localUrl = isDatabase || isWorker || isStaticSite ? "" : `http://127.0.0.1:${appPort}`;
-  const latestDeployment = db
-    .select({ status: deployments.status })
-    .from(deployments)
-    .where(eq(deployments.serviceId, service.id))
-    .orderBy(desc(deployments.createdAt))
-    .limit(1)
-    .get();
-  const shouldProbe = service.status === "active";
+  const latestDeployment = liveChecks
+    ? db
+        .select({ status: deployments.status })
+        .from(deployments)
+        .where(eq(deployments.serviceId, service.id))
+        .orderBy(desc(deployments.createdAt))
+        .limit(1)
+        .get()
+    : null;
+  const shouldProbe = liveChecks && service.status === "active";
   const reachable = shouldProbe
     ? isWorker
       ? await checkContainerRunning(containerNameForService(service.id))
@@ -619,8 +629,10 @@ async function publicService(service: Service) {
         : await checkPortReachable(appPort)
     : false;
   const latestDeploymentIsActive = latestDeployment?.status === "queued" || latestDeployment?.status === "building";
-  const liveStatus = service.status === "active" && !reachable && !latestDeploymentIsActive ? "crashed" : service.status;
-  const serviceDomains = isDatabase || isWorker ? [] : db.select().from(domains).where(eq(domains.serviceId, service.id)).orderBy(asc(domains.createdAt)).all();
+  const liveStatus = liveChecks && service.status === "active" && !reachable && !latestDeploymentIsActive ? "crashed" : service.status;
+  const serviceDomains = includeDomains && !isDatabase && !isWorker
+    ? db.select().from(domains).where(eq(domains.serviceId, service.id)).orderBy(asc(domains.createdAt)).all()
+    : [];
   const customDomains = serviceDomains.filter((domain) => !isGeneratedServiceHostname(service.slug, domain.hostname));
   const preferredDomain =
     customDomains.find((domain) => domain.status === "active") ??
@@ -631,9 +643,10 @@ async function publicService(service: Service) {
   const preferredDomainPayload = preferredDomain
     ? { hostname: preferredDomain.hostname, status: preferredDomain.status }
     : null;
+  const detectServiceFramework = options.frameworkDetection === "preview" ? detectFrameworkPreview : detectFramework;
   const framework = isDockerImage
     ? null
-    : await detectFramework(service.repoFullName, service.branch, service.rootDir, {
+    : await detectServiceFramework(service.repoFullName, service.branch, service.rootDir, {
         buildCommand: service.buildCommand,
         installCommand: service.installCommand,
         serviceName: service.name,
@@ -673,8 +686,8 @@ async function publicService(service: Service) {
   };
 }
 
-async function summarizeProject(project: ProjectGroup, projectServices: Service[]) {
-  const hydratedServices = await Promise.all(projectServices.map((service) => publicService(service)));
+async function summarizeProject(project: ProjectGroup, projectServices: Service[], serviceOptions: PublicServiceOptions = {}) {
+  const hydratedServices = await Promise.all(projectServices.map((service) => publicService(service, serviceOptions)));
   const statuses = hydratedServices.map((service) => service.status);
   const status = statuses.includes("queued") || statuses.includes("building")
     ? "building"
@@ -1760,7 +1773,11 @@ app.get("/api/projects", async (c) => {
   const groups = db.select().from(projectGroups).orderBy(desc(projectGroups.updatedAt)).all();
   const serviceRows = db.select().from(services).orderBy(asc(services.name)).all();
 
-  const grouped = await Promise.all(groups.map((group) => summarizeProject(group, serviceRows.filter((service) => service.projectId === group.id))));
+  const grouped = await Promise.all(groups.map((group) => summarizeProject(
+    group,
+    serviceRows.filter((service) => service.projectId === group.id),
+    { frameworkDetection: "preview", includeDomains: false, liveChecks: false }
+  )));
   return c.json({ projects: sortProjectsByRecentActivity(grouped) });
 });
 
