@@ -62,6 +62,54 @@ function textOrNull(value: string) {
   return trimmed || null;
 }
 
+type ServiceSettingsState = {
+  name: string;
+  repoFullName: string;
+  repoUrl: string;
+  dockerImage: string;
+  branch: string;
+  rootDir: string;
+  installCommand: string;
+  buildCommand: string;
+  startCommand: string;
+  staticOutput: string;
+  runtimeMode: "web" | "worker";
+  internalPort: number;
+  databasePublicEnabled: boolean;
+  databasePublicHostname: string;
+  postgresLogicalReplicationEnabled: boolean;
+};
+
+function formValue(form: HTMLFormElement, name: string, fallback: string) {
+  const field = form.elements.namedItem(name);
+  return field instanceof HTMLInputElement ? field.value : fallback;
+}
+
+function formNumberValue(form: HTMLFormElement, name: string, fallback: number) {
+  const value = Number(formValue(form, name, String(fallback)));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function settingsFromService(service: Service): ServiceSettingsState {
+  return {
+    name: service.name,
+    repoFullName: service.repoFullName ?? "",
+    repoUrl: service.repoUrl,
+    dockerImage: service.dockerImage ?? dockerImageForService(service),
+    branch: service.branch,
+    rootDir: service.rootDir ?? "",
+    installCommand: service.installCommand ?? "",
+    buildCommand: service.buildCommand ?? "",
+    startCommand: service.startCommand ?? "",
+    staticOutput: service.staticOutput ?? "",
+    runtimeMode: service.runtimeMode,
+    internalPort: service.internalPort,
+    databasePublicEnabled: service.databasePublicEnabled,
+    databasePublicHostname: service.databasePublicHostname ?? "",
+    postgresLogicalReplicationEnabled: service.postgresLogicalReplicationEnabled
+  };
+}
+
 const serviceTabLabels: Record<ServiceTab, string> = {
   overview: "Overview",
   deployments: "Deployments",
@@ -104,7 +152,7 @@ export function ServicePageShell({
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [runtimeLogs, setRuntimeLogs] = useState<RuntimeLog[]>([]);
   const [suggestions, setSuggestions] = useState<Array<{ key: string; label: string }>>([]);
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<ServiceSettingsState>({
     name: "",
     repoFullName: "",
     repoUrl: "",
@@ -140,6 +188,12 @@ export function ServicePageShell({
   const [error, setError] = useState("");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const lastDeploymentRefreshRef = useRef(0);
+  const settingsServiceIdRef = useRef<null | string>(null);
+  const selectedTabRef = useRef(selectedTab);
+
+  useEffect(() => {
+    selectedTabRef.current = selectedTab;
+  }, [selectedTab]);
 
   const loadSuggestionKeys = useCallback(async () => {
     const suggs = await api.suggestionKeys(serviceId).catch(() => ({ suggestions: [], databaseVariables: [] }));
@@ -148,11 +202,13 @@ export function ServicePageShell({
     });
   }, [serviceId]);
 
-  const loadOverview = useCallback(async (options: { showLoading?: boolean } = {}) => {
+  const loadOverview = useCallback(async (options: { showLoading?: boolean; syncSettings?: boolean } = {}) => {
     const showLoading = options.showLoading ?? true;
     if (showLoading) setOverviewLoading(true);
     try {
       const result = await api.serviceOverview(serviceId);
+      const shouldSyncSettings = options.syncSettings ?? (selectedTabRef.current !== "settings" || settingsServiceIdRef.current !== result.service.id);
+      if (shouldSyncSettings) settingsServiceIdRef.current = result.service.id;
       startTransition(() => {
         setOverview(result);
         setActiveDeploymentId((current) => {
@@ -161,23 +217,7 @@ export function ServicePageShell({
           if (current && result.deployments.some((deployment) => deployment.id === current)) return current;
           return result.deployments[0]?.id ?? null;
         });
-        setSettings({
-          name: result.service.name,
-          repoFullName: result.service.repoFullName ?? "",
-          repoUrl: result.service.repoUrl,
-          dockerImage: result.service.dockerImage ?? dockerImageForService(result.service),
-          branch: result.service.branch,
-          rootDir: result.service.rootDir ?? "",
-          installCommand: result.service.installCommand ?? "",
-          buildCommand: result.service.buildCommand ?? "",
-          startCommand: result.service.startCommand ?? "",
-          staticOutput: result.service.staticOutput ?? "",
-          runtimeMode: result.service.runtimeMode,
-          internalPort: result.service.internalPort,
-          databasePublicEnabled: result.service.databasePublicEnabled,
-          databasePublicHostname: result.service.databasePublicHostname ?? "",
-          postgresLogicalReplicationEnabled: result.service.postgresLogicalReplicationEnabled
-        });
+        if (shouldSyncSettings) setSettings(settingsFromService(result.service));
         setError("");
         setOverviewLoading(false);
       });
@@ -190,6 +230,7 @@ export function ServicePageShell({
   }, [serviceId]);
 
   useEffect(() => {
+    settingsServiceIdRef.current = null;
     void loadOverview();
     void loadSuggestionKeys();
   }, [loadOverview, loadSuggestionKeys, serviceId]);
@@ -343,7 +384,7 @@ export function ServicePageShell({
     setError("");
     try {
       await action();
-      await loadOverview({ showLoading: false });
+      await loadOverview({ showLoading: false, syncSettings: label === "settings" });
       await loadSuggestionKeys();
       await onProjectRefresh();
       if (actionRequiresRedeploy(label)) {
@@ -408,25 +449,43 @@ export function ServicePageShell({
     });
   }
 
-  async function saveSettings(event: FormEvent) {
+  function settingsSnapshotFromForm(form: HTMLFormElement): ServiceSettingsState {
+    return {
+      ...settings,
+      name: formValue(form, "name", settings.name),
+      dockerImage: formValue(form, "dockerImage", settings.dockerImage),
+      branch: formValue(form, "branch", settings.branch),
+      rootDir: formValue(form, "rootDir", settings.rootDir),
+      installCommand: formValue(form, "installCommand", settings.installCommand),
+      buildCommand: formValue(form, "buildCommand", settings.buildCommand),
+      startCommand: formValue(form, "startCommand", settings.startCommand),
+      staticOutput: formValue(form, "staticOutput", settings.staticOutput),
+      internalPort: formNumberValue(form, "internalPort", settings.internalPort),
+      databasePublicHostname: formValue(form, "databasePublicHostname", settings.databasePublicHostname)
+    };
+  }
+
+  async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const submittedSettings = settingsSnapshotFromForm(event.currentTarget);
+    setSettings(submittedSettings);
     await doAction("settings", async () => {
       await api.updateService(serviceId, {
-        name: settings.name,
-        repoFullName: isDatabase ? settings.repoFullName : isDockerImage ? dockerImageRepoFullName(settings.dockerImage) : (settings.repoFullName.trim() ? settings.repoFullName : null),
-        repoUrl: isDatabase ? undefined : isDockerImage ? "docker-image" : (settings.repoFullName.trim() ? undefined : settings.repoUrl.trim() || undefined),
-        dockerImage: isDockerImage ? settings.dockerImage : undefined,
-        branch: settings.branch,
-        rootDir: isDatabase || isDockerImage ? undefined : textOrNull(settings.rootDir),
-        installCommand: isDatabase || isDockerImage ? undefined : textOrNull(settings.installCommand),
-        buildCommand: isDatabase || isDockerImage ? undefined : textOrNull(settings.buildCommand),
-        startCommand: isDatabase || isDockerImage ? undefined : textOrNull(settings.startCommand),
-        staticOutput: isDatabase || isDockerImage ? undefined : textOrNull(settings.staticOutput),
-        runtimeMode: isDatabase ? undefined : settings.runtimeMode,
-        internalPort: Number(settings.internalPort),
+        name: submittedSettings.name,
+        repoFullName: isDatabase ? submittedSettings.repoFullName : isDockerImage ? dockerImageRepoFullName(submittedSettings.dockerImage) : (submittedSettings.repoFullName.trim() ? submittedSettings.repoFullName : null),
+        repoUrl: isDatabase ? undefined : isDockerImage ? "docker-image" : (submittedSettings.repoFullName.trim() ? undefined : submittedSettings.repoUrl.trim() || undefined),
+        dockerImage: isDockerImage ? submittedSettings.dockerImage : undefined,
+        branch: submittedSettings.branch,
+        rootDir: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.rootDir),
+        installCommand: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.installCommand),
+        buildCommand: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.buildCommand),
+        startCommand: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.startCommand),
+        staticOutput: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.staticOutput),
+        runtimeMode: isDatabase ? undefined : submittedSettings.runtimeMode,
+        internalPort: Number(submittedSettings.internalPort),
         databasePublicEnabled: isDatabase ? true : undefined,
-        databasePublicHostname: isDatabase ? settings.databasePublicHostname || undefined : undefined,
-        postgresLogicalReplicationEnabled: isDatabase ? settings.postgresLogicalReplicationEnabled : undefined
+        databasePublicHostname: isDatabase ? submittedSettings.databasePublicHostname || undefined : undefined,
+        postgresLogicalReplicationEnabled: isDatabase ? submittedSettings.postgresLogicalReplicationEnabled : undefined
       });
     });
   }
@@ -676,14 +735,14 @@ export function ServicePageShell({
                           settings={settings}
                           hostPort={service?.hostPort}
                           supportsLogicalReplication={supportsPostgresLogicalReplication}
-                          onChange={(nextSettings) => setSettings({ ...settings, ...nextSettings })}
+                          onChange={(nextSettings) => setSettings((current) => ({ ...current, ...nextSettings }))}
                         />
                       </>
                     ) : isDockerImage ? (
                       <DockerImageServiceSettingsPanel
                         settings={settings}
                         hostPort={service?.hostPort}
-                        onChange={(nextSettings) => setSettings({ ...settings, ...nextSettings })}
+                        onChange={(nextSettings) => setSettings((current) => ({ ...current, ...nextSettings }))}
                       />
                     ) : (
                       <>
@@ -718,17 +777,20 @@ export function ServicePageShell({
                         <div className="relative">
                           <FieldLabel>Branch</FieldLabel>
                           {isGitUrlSource ? (
-                            <FormInput value={settings.branch} onChange={(event) => setSettings({ ...settings, branch: event.target.value })} placeholder="main" />
+                            <FormInput name="branch" value={settings.branch} onChange={(event) => setSettings((current) => ({ ...current, branch: event.target.value }))} placeholder="main" />
                           ) : (
-                            <button
-                              type="button"
-                              className="flex h-11 w-full items-center justify-between border border-zinc-700 bg-zinc-900 px-3 text-left text-sm text-zinc-100"
-                              onClick={() => setBranchMenuOpen((current) => !current)}
-                              disabled={!settings.repoFullName}
-                            >
-                              <span>{settings.branch || "Select branch"}</span>
-                              <AppIcon icon={ArrowLeft01Icon} size={16} className={branchMenuOpen ? "rotate-90" : "-rotate-90"} />
-                            </button>
+                            <>
+                              <input type="hidden" name="branch" value={settings.branch} />
+                              <button
+                                type="button"
+                                className="flex h-11 w-full items-center justify-between border border-zinc-700 bg-zinc-900 px-3 text-left text-sm text-zinc-100"
+                                onClick={() => setBranchMenuOpen((current) => !current)}
+                                disabled={!settings.repoFullName}
+                              >
+                                <span>{settings.branch || "Select branch"}</span>
+                                <AppIcon icon={ArrowLeft01Icon} size={16} className={branchMenuOpen ? "rotate-90" : "-rotate-90"} />
+                              </button>
+                            </>
                           )}
                           {!isGitUrlSource && branchMenuOpen ? (
                             <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-64 overflow-auto border border-zinc-700 bg-zinc-900 shadow-[0_20px_40px_rgba(0,0,0,0.35)]">
@@ -755,26 +817,29 @@ export function ServicePageShell({
                         <div>
                           <FieldLabel>Directory</FieldLabel>
                           {isGitUrlSource ? (
-                            <FormInput value={settings.rootDir} onChange={(event) => setSettings({ ...settings, rootDir: event.target.value })} placeholder="." />
+                            <FormInput name="rootDir" value={settings.rootDir} onChange={(event) => setSettings((current) => ({ ...current, rootDir: event.target.value }))} placeholder="." />
                           ) : (
-                            <div className="flex h-11 items-center justify-between gap-3 border border-zinc-700 bg-zinc-900 px-3">
-                              <div className="truncate text-sm text-zinc-100">{settings.rootDir || "."}</div>
-                              <button
-                                type="button"
-                                className="inline-flex h-9 items-center justify-center gap-2 border border-zinc-800 bg-zinc-900/70 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-60"
-                                onClick={() => setDirectoryPickerOpen(true)}
-                                disabled={!settings.repoFullName}
-                              >
-                                <AppIcon icon={PencilEdit02Icon} size={15} />
-                                Edit
-                              </button>
-                            </div>
+                            <>
+                              <input type="hidden" name="rootDir" value={settings.rootDir} />
+                              <div className="flex h-11 items-center justify-between gap-3 border border-zinc-700 bg-zinc-900 px-3">
+                                <div className="truncate text-sm text-zinc-100">{settings.rootDir || "."}</div>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-9 items-center justify-center gap-2 border border-zinc-800 bg-zinc-900/70 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-60"
+                                  onClick={() => setDirectoryPickerOpen(true)}
+                                  disabled={!settings.repoFullName}
+                                >
+                                  <AppIcon icon={PencilEdit02Icon} size={15} />
+                                  Edit
+                                </button>
+                              </div>
+                            </>
                           )}
                         </div>
 
                         <div>
                           <FieldLabel>Service name</FieldLabel>
-                          <FormInput value={settings.name} onChange={(event) => setSettings({ ...settings, name: event.target.value })} />
+                          <FormInput name="name" value={settings.name} onChange={(event) => setSettings((current) => ({ ...current, name: event.target.value }))} />
                         </div>
                         <div className="xl:col-span-2">
                           <FieldLabel>Runtime mode</FieldLabel>
@@ -790,27 +855,29 @@ export function ServicePageShell({
                         {settings.runtimeMode !== "worker" ? (
                           <div>
                             <FieldLabel>App port</FieldLabel>
-                            <FormInput type="number" value={settings.internalPort} onChange={(event) => setSettings({ ...settings, internalPort: Number(event.target.value) })} />
+                            <FormInput name="internalPort" type="number" value={settings.internalPort} onChange={(event) => setSettings((current) => ({ ...current, internalPort: Number(event.target.value) }))} />
                           </div>
                         ) : null}
                         <div>
                           <FieldLabel>Install command</FieldLabel>
-                          <FormInput value={settings.installCommand} onChange={(event) => setSettings({ ...settings, installCommand: event.target.value })} placeholder="auto" />
+                          <FormInput name="installCommand" value={settings.installCommand} onChange={(event) => setSettings((current) => ({ ...current, installCommand: event.target.value }))} placeholder="auto" />
                         </div>
                         <div>
                           <FieldLabel>Build command</FieldLabel>
-                          <FormInput value={settings.buildCommand} onChange={(event) => setSettings({ ...settings, buildCommand: event.target.value })} placeholder="auto" />
+                          <FormInput name="buildCommand" value={settings.buildCommand} onChange={(event) => setSettings((current) => ({ ...current, buildCommand: event.target.value }))} placeholder="auto" />
                         </div>
                         <div>
                           <FieldLabel>Start command</FieldLabel>
-                          <FormInput value={settings.startCommand} onChange={(event) => setSettings({ ...settings, startCommand: event.target.value })} placeholder="auto" />
+                          <FormInput name="startCommand" value={settings.startCommand} onChange={(event) => setSettings((current) => ({ ...current, startCommand: event.target.value }))} placeholder="auto" />
                         </div>
                         {settings.runtimeMode !== "worker" ? (
                           <div>
                             <FieldLabel>Static output</FieldLabel>
-                            <FormInput value={settings.staticOutput} onChange={(event) => setSettings({ ...settings, staticOutput: event.target.value })} placeholder="auto" />
+                            <FormInput name="staticOutput" value={settings.staticOutput} onChange={(event) => setSettings((current) => ({ ...current, staticOutput: event.target.value }))} placeholder="auto" />
                           </div>
-                        ) : null}
+                        ) : (
+                          <input type="hidden" name="staticOutput" value={settings.staticOutput} />
+                        )}
                       </>
                     )}
                   </div>
