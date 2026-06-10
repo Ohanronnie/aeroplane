@@ -86,6 +86,15 @@ import {
   publicUser,
   requireAuth
 } from "./auth.js";
+import { registerApiKeyRoutes } from "./api-key-routes.js";
+import {
+  canAccessProject,
+  requireAllProjectsScope,
+  requireApiMethodAccessMiddleware,
+  requireProjectAccess,
+  requireServiceAccess,
+  requireSessionAccessMiddleware
+} from "./api-access-control.js";
 import { managedEnvPath, writeManagedEnv, writeManagedEnvPatch } from "./env-file.js";
 import { generateSecretKey, hasSecretKey } from "./secret-crypto.js";
 import {
@@ -527,6 +536,51 @@ function getProjectBySlug(projectSlug: string) {
 
 function getProjectById(projectId: string) {
   return db.select().from(projectGroups).where(eq(projectGroups.id, projectId)).get();
+}
+
+type AuthorizedServiceResult = { service: Service; response?: never } | { service?: never; response: Response };
+
+function getAuthorizedService(c: Context): AuthorizedServiceResult {
+  const serviceId = c.req.param("serviceId");
+  if (!serviceId) {
+    return { response: jsonError("Service not found", 404) };
+  }
+
+  const service = getServiceById(serviceId);
+  if (!service) {
+    return { response: jsonError("Service not found", 404) };
+  }
+
+  const denied = requireServiceAccess(c, service);
+  if (denied) {
+    return { response: denied };
+  }
+
+  return { service };
+}
+
+function getAuthorizedDeploymentService(c: Context): AuthorizedServiceResult {
+  const deploymentId = c.req.param("deploymentId");
+  if (!deploymentId) {
+    return { response: jsonError("Deployment not found", 404) };
+  }
+
+  const deployment = db.select().from(deployments).where(eq(deployments.id, deploymentId)).get();
+  if (!deployment) {
+    return { response: jsonError("Deployment not found", 404) };
+  }
+
+  const service = getServiceById(deployment.serviceId);
+  if (!service) {
+    return { response: jsonError("Service not found", 404) };
+  }
+
+  const denied = requireServiceAccess(c, service);
+  if (denied) {
+    return { response: denied };
+  }
+
+  return { service };
 }
 
 function getServicesForProject(projectId: string) {
@@ -1226,6 +1280,16 @@ app.get("/api/assets/framework-icons/:file", async (c) => {
 });
 
 app.use("/api/*", requireAuth);
+app.use("/api/system", requireSessionAccessMiddleware);
+app.use("/api/system/*", requireSessionAccessMiddleware);
+app.use("/api/github/repos", requireSessionAccessMiddleware);
+app.use("/api/github/branches", requireSessionAccessMiddleware);
+app.use("/api/github/directories", requireSessionAccessMiddleware);
+app.use("/api/integrations/*", requireSessionAccessMiddleware);
+app.use("/api/projects", requireApiMethodAccessMiddleware);
+app.use("/api/projects/*", requireApiMethodAccessMiddleware);
+app.use("/api/services/*", requireApiMethodAccessMiddleware);
+app.use("/api/deployments/*", requireApiMethodAccessMiddleware);
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
@@ -1372,6 +1436,8 @@ app.post("/api/system/settings", async (c) => {
     caddy
   });
 });
+
+registerApiKeyRoutes(app);
 
 app.get("/api/system/r2", (c) => c.json({ r2: publicR2Settings() }));
 
@@ -1770,8 +1836,9 @@ app.get("/api/github/directories", async (c) => {
 });
 
 app.get("/api/projects", async (c) => {
-  const groups = db.select().from(projectGroups).orderBy(desc(projectGroups.updatedAt)).all();
-  const serviceRows = db.select().from(services).orderBy(asc(services.name)).all();
+  const groups = db.select().from(projectGroups).orderBy(desc(projectGroups.updatedAt)).all().filter((group) => canAccessProject(c, group.id));
+  const projectIds = new Set(groups.map((group) => group.id));
+  const serviceRows = db.select().from(services).orderBy(asc(services.name)).all().filter((service) => projectIds.has(service.projectId));
 
   const grouped = await Promise.all(groups.map((group) => summarizeProject(
     group,
@@ -1786,6 +1853,8 @@ app.post("/api/projects", async (c) => {
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid project");
   }
+  const denied = requireAllProjectsScope(c);
+  if (denied) return denied;
 
   const timestamp = nowIso();
   const projectSlug = createUniqueSlug(body.data.name, getProjectSlugSet());
@@ -1807,6 +1876,8 @@ app.get("/api/projects/:projectSlug", async (c) => {
   if (!project) {
     return jsonError("Project not found", 404);
   }
+  const denied = requireProjectAccess(c, project.id);
+  if (denied) return denied;
 
   return c.json({ project: await summarizeProject(project, getServicesForProject(project.id)) });
 });
@@ -1816,6 +1887,8 @@ app.patch("/api/projects/:projectId", async (c) => {
   if (!project) {
     return jsonError("Project not found", 404);
   }
+  const denied = requireProjectAccess(c, project.id);
+  if (denied) return denied;
 
   const body = updateProjectSchema.safeParse(await c.req.json());
   if (!body.success) {
@@ -1842,6 +1915,8 @@ app.get("/api/projects/:projectId/database-variable-suggestions", async (c) => {
   if (!project) {
     return jsonError("Project not found", 404);
   }
+  const denied = requireProjectAccess(c, project.id);
+  if (denied) return denied;
 
   return c.json({ suggestions: databaseConnectionEnvSuggestionsForProject(project.id) });
 });
@@ -1851,6 +1926,8 @@ app.get("/api/projects/:projectId/env-example-variable-suggestions", async (c) =
   if (!project) {
     return jsonError("Project not found", 404);
   }
+  const denied = requireProjectAccess(c, project.id);
+  if (denied) return denied;
 
   const query = envExampleSuggestionsQuerySchema.safeParse({
     repo: c.req.query("repo"),
@@ -1877,6 +1954,8 @@ app.post("/api/projects/:projectId/services", async (c) => {
   if (!project) {
     return jsonError("Project not found", 404);
   }
+  const denied = requireProjectAccess(c, project.id);
+  if (denied) return denied;
 
   const body = createServiceSchema.safeParse(await c.req.json());
   if (!body.success) {
@@ -1930,10 +2009,9 @@ async function checkDomainDns(hostname: string, targetIp: string): Promise<"acti
 }
 
 app.get("/api/services/:serviceId/overview", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
   const isDatabase = isDatabaseService(service);
   const isWorker = isWorkerService(service);
   if (isDatabase) {
@@ -1997,10 +2075,9 @@ app.get("/api/services/:serviceId/overview", async (c) => {
 });
 
 app.get("/api/services/:serviceId/suggestion-keys", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
 
   const groupServices = db
     .select()
@@ -2065,6 +2142,9 @@ app.get("/api/services/:serviceId/suggestion-keys", async (c) => {
 });
 
 app.get("/api/services/:serviceId/database/tables", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   try {
     return c.json(await getDatabaseTables(c.req.param("serviceId"), Number(c.req.query("database") ?? 0)));
   } catch (error) {
@@ -2073,6 +2153,9 @@ app.get("/api/services/:serviceId/database/tables", async (c) => {
 });
 
 app.get("/api/services/:serviceId/database/rows", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   try {
     const table = c.req.query("table") ?? "";
     if (!table) return jsonError("Table is required");
@@ -2087,6 +2170,9 @@ app.get("/api/services/:serviceId/database/rows", async (c) => {
 });
 
 app.post("/api/services/:serviceId/database/query", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = databaseQuerySchema.safeParse(await c.req.json());
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid SQL query");
@@ -2100,6 +2186,9 @@ app.post("/api/services/:serviceId/database/query", async (c) => {
 });
 
 app.post("/api/services/:serviceId/database/rows", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = databaseInsertSchema.safeParse(await c.req.json());
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid row");
@@ -2113,6 +2202,9 @@ app.post("/api/services/:serviceId/database/rows", async (c) => {
 });
 
 app.patch("/api/services/:serviceId/database/rows", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = databaseUpdateSchema.safeParse(await c.req.json());
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid row update");
@@ -2126,6 +2218,9 @@ app.patch("/api/services/:serviceId/database/rows", async (c) => {
 });
 
 app.delete("/api/services/:serviceId/database/rows", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = databaseDeleteSchema.safeParse(await c.req.json());
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid row delete");
@@ -2139,6 +2234,9 @@ app.delete("/api/services/:serviceId/database/rows", async (c) => {
 });
 
 app.get("/api/services/:serviceId/database/backups", (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   try {
     const serviceId = c.req.param("serviceId");
     return c.json({
@@ -2152,6 +2250,9 @@ app.get("/api/services/:serviceId/database/backups", (c) => {
 });
 
 app.patch("/api/services/:serviceId/database/backups/settings", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = backupSettingsSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid backup settings");
@@ -2165,6 +2266,9 @@ app.patch("/api/services/:serviceId/database/backups/settings", async (c) => {
 });
 
 app.post("/api/services/:serviceId/database/backups", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = backupCreateSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid backup request");
@@ -2178,6 +2282,9 @@ app.post("/api/services/:serviceId/database/backups", async (c) => {
 });
 
 app.get("/api/services/:serviceId/database/backups/:backupId/download", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   let cleanup: null | (() => void) = null;
   try {
     const file = getDatabaseBackupFile(c.req.param("serviceId"), c.req.param("backupId"));
@@ -2201,6 +2308,9 @@ app.get("/api/services/:serviceId/database/backups/:backupId/download", async (c
 });
 
 app.post("/api/services/:serviceId/database/backups/:backupId/restore", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   try {
     return c.json(await restoreDatabaseBackup(c.req.param("serviceId"), c.req.param("backupId")));
   } catch (error) {
@@ -2209,8 +2319,10 @@ app.post("/api/services/:serviceId/database/backups/:backupId/restore", async (c
 });
 
 app.get("/api/services/:serviceId/database/tls", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service || !isDatabaseService(service)) {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
+  if (!isDatabaseService(service)) {
     return jsonError("Database service not found", 404);
   }
   if (!isPostgresFamilyDatabase(databaseTypeForService(service))) {
@@ -2228,8 +2340,10 @@ app.get("/api/services/:serviceId/database/tls", async (c) => {
 });
 
 app.get("/api/services/:serviceId/database/tls/ca", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service || !isDatabaseService(service)) {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
+  if (!isDatabaseService(service)) {
     return jsonError("Database service not found", 404);
   }
   if (!isPostgresFamilyDatabase(databaseTypeForService(service))) {
@@ -2250,6 +2364,9 @@ app.get("/api/services/:serviceId/database/tls/ca", async (c) => {
 });
 
 app.delete("/api/services/:serviceId/database/backups/:backupId", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   try {
     return c.json(await deleteDatabaseBackup(c.req.param("serviceId"), c.req.param("backupId")));
   } catch (error) {
@@ -2258,14 +2375,16 @@ app.delete("/api/services/:serviceId/database/backups/:backupId", async (c) => {
 });
 
 app.get("/api/services/:serviceId/import-sources", (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
   return c.json({ sources: listServiceImportSources(service.id) });
 });
 
 app.get("/api/services/:serviceId/database/imports", (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   try {
     return c.json({ imports: listDatabaseDataImports(c.req.param("serviceId")) });
   } catch (error) {
@@ -2274,6 +2393,9 @@ app.get("/api/services/:serviceId/database/imports", (c) => {
 });
 
 app.post("/api/services/:serviceId/database/import/postgres-url", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = postgresUrlImportSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid Postgres import request");
@@ -2287,6 +2409,9 @@ app.post("/api/services/:serviceId/database/import/postgres-url", async (c) => {
 });
 
 app.post("/api/services/:serviceId/database/import/railway", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = railwayDataImportSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid Railway import request");
@@ -2300,6 +2425,9 @@ app.post("/api/services/:serviceId/database/import/railway", async (c) => {
 });
 
 app.post("/api/services/:serviceId/database/import/redis-url", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = redisUrlImportSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid Redis import request");
@@ -2313,6 +2441,9 @@ app.post("/api/services/:serviceId/database/import/redis-url", async (c) => {
 });
 
 app.post("/api/services/:serviceId/database/import/redis-railway", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const body = railwayDataImportSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid Railway import request");
@@ -2326,10 +2457,9 @@ app.post("/api/services/:serviceId/database/import/redis-railway", async (c) => 
 });
 
 app.patch("/api/services/:serviceId", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
 
   const body = updateServiceSchema.safeParse(await c.req.json());
   if (!body.success) {
@@ -2396,10 +2526,9 @@ app.patch("/api/services/:serviceId", async (c) => {
 });
 
 app.post("/api/services/:serviceId/transfer", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
 
   const body = transferServiceSchema.safeParse(await c.req.json());
   if (!body.success) {
@@ -2410,6 +2539,8 @@ app.post("/api/services/:serviceId/transfer", async (c) => {
   if (!targetProject) {
     return jsonError("Target project not found", 404);
   }
+  const targetDenied = requireProjectAccess(c, targetProject.id);
+  if (targetDenied) return targetDenied;
   if (targetProject.id === service.projectId) {
     return jsonError("Choose a different project for this service.");
   }
@@ -2460,10 +2591,9 @@ app.post("/api/services/:serviceId/transfer", async (c) => {
 });
 
 app.delete("/api/services/:serviceId", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
 
   await removeServiceRuntime(service);
   db.delete(domains).where(eq(domains.serviceId, service.id)).run();
@@ -2486,6 +2616,8 @@ app.delete("/api/projects/:projectId", async (c) => {
   if (!project) {
     return jsonError("Project not found", 404);
   }
+  const denied = requireProjectAccess(c, project.id);
+  if (denied) return denied;
 
   const projectServices = getServicesForProject(project.id);
   for (const service of projectServices) {
@@ -2507,10 +2639,9 @@ app.delete("/api/projects/:projectId", async (c) => {
 
 app.post("/api/services/:serviceId/deployments", (c) => {
   try {
-    const service = getServiceById(c.req.param("serviceId"));
-    if (!service) {
-      return jsonError("Service not found", 404);
-    }
+    const serviceAccess = getAuthorizedService(c);
+    if (serviceAccess.response) return serviceAccess.response;
+    const { service } = serviceAccess;
 
     syncProjectDatabaseConnectionEnv(service.projectId);
     const deployment = enqueueDeployment(service.id, { trigger: "manual" });
@@ -2522,6 +2653,9 @@ app.post("/api/services/:serviceId/deployments", (c) => {
 
 app.post("/api/deployments/:deploymentId/abort", (c) => {
   try {
+    const serviceAccess = getAuthorizedDeploymentService(c);
+    if (serviceAccess.response) return serviceAccess.response;
+
     const result = abortDeployment(c.req.param("deploymentId"));
     return c.json(result, 202);
   } catch (error) {
@@ -2531,10 +2665,14 @@ app.post("/api/deployments/:deploymentId/abort", (c) => {
 });
 
 app.get("/api/services/:serviceId/deployments", (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
+
   const rows = db
     .select()
     .from(deployments)
-    .where(eq(deployments.serviceId, c.req.param("serviceId")))
+    .where(eq(deployments.serviceId, service.id))
     .orderBy(desc(deployments.createdAt))
     .limit(30)
     .all();
@@ -2542,6 +2680,9 @@ app.get("/api/services/:serviceId/deployments", (c) => {
 });
 
 app.get("/api/deployments/:deploymentId/logs", (c) => {
+  const serviceAccess = getAuthorizedDeploymentService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const rows = db
     .select()
     .from(deploymentLogs)
@@ -2553,6 +2694,9 @@ app.get("/api/deployments/:deploymentId/logs", (c) => {
 
 app.post("/api/deployments/:deploymentId/explain-failure", async (c) => {
   try {
+    const serviceAccess = getAuthorizedDeploymentService(c);
+    if (serviceAccess.response) return serviceAccess.response;
+
     const body = deploymentFailureExplanationRequestSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) {
       return jsonError(body.error.issues[0]?.message ?? "Invalid AI explanation request");
@@ -2572,6 +2716,9 @@ app.post("/api/deployments/:deploymentId/explain-failure", async (c) => {
 });
 
 app.get("/api/deployments/:deploymentId/stream", (c) => {
+  const serviceAccess = getAuthorizedDeploymentService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+
   const deploymentId = c.req.param("deploymentId");
   const encoder = new TextEncoder();
 
@@ -2611,10 +2758,9 @@ app.get("/api/deployments/:deploymentId/stream", (c) => {
 });
 
 app.get("/api/services/:serviceId/runtime-logs/stream", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
 
   const containerName = containerNameForService(service.id);
   const snapshot = await readContainerLogs(containerName);
@@ -2684,10 +2830,9 @@ app.get("/api/services/:serviceId/runtime-logs/stream", async (c) => {
 });
 
 app.post("/api/services/:serviceId/env", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
 
   const body = envSchema.safeParse(await c.req.json());
   if (!body.success) {
@@ -2710,16 +2855,19 @@ app.post("/api/services/:serviceId/env", async (c) => {
 });
 
 app.delete("/api/services/:serviceId/env/:envId", (c) => {
-  db.delete(envVars).where(eq(envVars.id, c.req.param("envId"))).run();
-  syncDatabaseUrlEnvVar(c.req.param("serviceId"));
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
+
+  db.delete(envVars).where(and(eq(envVars.id, c.req.param("envId")), eq(envVars.serviceId, service.id))).run();
+  syncDatabaseUrlEnvVar(service.id);
   return c.json({ ok: true });
 });
 
 app.post("/api/services/:serviceId/domains", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
   if (isWorkerService(service)) {
     return jsonError("Background workers do not accept custom domains");
   }
@@ -2742,16 +2890,19 @@ app.post("/api/services/:serviceId/domains", async (c) => {
 });
 
 app.delete("/api/services/:serviceId/domains/:domainId", async (c) => {
-  db.delete(domains).where(eq(domains.id, c.req.param("domainId"))).run();
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
+
+  db.delete(domains).where(and(eq(domains.id, c.req.param("domainId")), eq(domains.serviceId, service.id))).run();
   const caddy = await writeAndReloadCaddy();
   return c.json({ ok: true, caddy });
 });
 
 app.patch("/api/services/:serviceId/domains/:domainId", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
   if (isWorkerService(service)) {
     return jsonError("Background workers do not accept custom domains");
   }
@@ -2767,7 +2918,7 @@ app.patch("/api/services/:serviceId/domains/:domainId", async (c) => {
 
   db.update(domains)
     .set({ hostname, status, updatedAt: nowIso() })
-    .where(eq(domains.id, c.req.param("domainId")))
+    .where(and(eq(domains.id, c.req.param("domainId")), eq(domains.serviceId, service.id)))
     .run();
 
   const caddy = await writeAndReloadCaddy();
@@ -2775,10 +2926,9 @@ app.patch("/api/services/:serviceId/domains/:domainId", async (c) => {
 });
 
 app.post("/api/services/:serviceId/domains/:domainId/dns-records", async (c) => {
-  const service = getServiceById(c.req.param("serviceId"));
-  if (!service) {
-    return jsonError("Service not found", 404);
-  }
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
   if (isWorkerService(service)) {
     return jsonError("Background workers do not accept custom domains");
   }
