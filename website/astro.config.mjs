@@ -91,6 +91,12 @@ export default defineConfig({
           label: "Reference",
           items: [
             "docs/reference/system-settings",
+            "docs/reference/api-access",
+            "docs/reference/api-projects",
+            "docs/reference/api-services",
+            "docs/reference/api-deployments",
+            "docs/reference/api-databases",
+            "docs/reference/api-environment-and-domains",
           ],
         },
       ],
