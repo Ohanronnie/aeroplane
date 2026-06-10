@@ -20,6 +20,7 @@ type PackageJson = {
 };
 
 const frameworkCache = new Map<string, { expiresAt: number; value: FrameworkMeta | null }>();
+const frameworkDetectionInFlight = new Map<string, Promise<FrameworkMeta | null>>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 type FrameworkDetectionOptions = {
@@ -243,6 +244,47 @@ async function databaseFrameworkMeta(dbType: string) {
   return frameworkMetaFromCatalog(entry);
 }
 
+function cachedFramework(key: string) {
+  const cached = frameworkCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  return undefined;
+}
+
+function setCachedFramework(key: string, value: FrameworkMeta | null) {
+  frameworkCache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
+async function resolveFramework(repoFullName: string, branch: string, rootDir: null | string, options: FrameworkDetectionOptions = {}) {
+  const fileMatch = await detectFrameworkFromProjectFiles((path) => readRepoFile(repoFullName, branch, path), rootDir, options);
+  if (fileMatch) {
+    return frameworkMetaFromCatalog(fileMatch);
+  }
+
+  const packageJsons = await readPackageJsons(repoFullName, branch, rootDir, options);
+  if (packageJsons.length === 0) return null;
+
+  const runtimeMatch = packageFrameworkMatch(packageJsons, options);
+  if (!runtimeMatch) return null;
+
+  return frameworkMetaFromCatalog(runtimeMatch);
+}
+
+function warmFrameworkCache(key: string, repoFullName: string, branch: string, rootDir: null | string, options: FrameworkDetectionOptions = {}) {
+  const existing = frameworkDetectionInFlight.get(key);
+  if (existing) return existing;
+
+  const promise = resolveFramework(repoFullName, branch, rootDir, options)
+    .then((framework) => {
+      setCachedFramework(key, framework);
+      return framework;
+    })
+    .finally(() => {
+      frameworkDetectionInFlight.delete(key);
+    });
+  frameworkDetectionInFlight.set(key, promise);
+  return promise;
+}
+
 export async function detectFramework(repoFullName: null | string, branch: string, rootDir: null | string, options: FrameworkDetectionOptions = {}) {
   if (!repoFullName) return null;
 
@@ -252,29 +294,24 @@ export async function detectFramework(repoFullName: null | string, branch: strin
   }
 
   const key = cacheKey(repoFullName, branch, rootDir, options);
-  const cached = frameworkCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const cached = cachedFramework(key);
+  if (cached !== undefined) return cached;
 
-  const fileMatch = await detectFrameworkFromProjectFiles((path) => readRepoFile(repoFullName, branch, path), rootDir, options);
-  if (fileMatch) {
-    const framework = await frameworkMetaFromCatalog(fileMatch);
-    frameworkCache.set(key, { value: framework, expiresAt: Date.now() + CACHE_TTL_MS });
-    return framework;
+  return warmFrameworkCache(key, repoFullName, branch, rootDir, options);
+}
+
+export async function detectFrameworkPreview(repoFullName: null | string, branch: string, rootDir: null | string, options: FrameworkDetectionOptions = {}) {
+  if (!repoFullName) return null;
+
+  if (repoFullName.startsWith("database:")) {
+    const dbType = repoFullName.split(":")[1];
+    return databaseFrameworkMeta(dbType);
   }
 
-  const packageJsons = await readPackageJsons(repoFullName, branch, rootDir, options);
-  if (packageJsons.length === 0) {
-    frameworkCache.set(key, { value: null, expiresAt: Date.now() + CACHE_TTL_MS });
-    return null;
-  }
+  const key = cacheKey(repoFullName, branch, rootDir, options);
+  const cached = cachedFramework(key);
+  if (cached !== undefined) return cached;
 
-  const runtimeMatch = packageFrameworkMatch(packageJsons, options);
-  if (!runtimeMatch) {
-    frameworkCache.set(key, { value: null, expiresAt: Date.now() + CACHE_TTL_MS });
-    return null;
-  }
-
-  const framework = await frameworkMetaFromCatalog(runtimeMatch);
-  frameworkCache.set(key, { value: framework, expiresAt: Date.now() + CACHE_TTL_MS });
-  return framework;
+  void warmFrameworkCache(key, repoFullName, branch, rootDir, options).catch(() => undefined);
+  return null;
 }
