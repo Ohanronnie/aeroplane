@@ -28,6 +28,14 @@ GitHub settings support either:
 
 The GitHub App path enables repository discovery and push webhooks.
 
+## API Access
+
+API Access creates scoped API keys for programmatic requests to Aeroplane.
+
+Keys can be read-only or read/write, scoped to all projects or selected projects, and configured to expire after `7`, `30`, or `90` days, or never expire.
+
+API keys use bearer authentication against the same `/api/*` endpoints as the dashboard. See [API Access](/docs/reference/api-access/) for examples and endpoint behavior.
+
 ## Storage
 
 R2 settings store Cloudflare account ID, bucket, endpoint, access key suffix, encrypted secret access key, and timestamps.
