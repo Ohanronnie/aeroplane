@@ -174,6 +174,29 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   last_seen_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  token_prefix TEXT NOT NULL,
+  access_level TEXT NOT NULL,
+  project_scope TEXT NOT NULL,
+  created_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_used_at TEXT,
+  expires_at TEXT,
+  revoked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS api_key_project_scopes (
+  id TEXT PRIMARY KEY,
+  api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  UNIQUE(api_key_id, project_id)
+);
 `);
 
 function hasColumn(table: string, column: string) {
@@ -252,6 +275,10 @@ CREATE INDEX IF NOT EXISTS idx_service_import_sources_provider ON service_import
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_token ON auth_sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_token ON api_keys(token_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(revoked_at, expires_at);
+CREATE INDEX IF NOT EXISTS idx_api_key_project_scopes_key ON api_key_project_scopes(api_key_id);
+CREATE INDEX IF NOT EXISTS idx_api_key_project_scopes_project ON api_key_project_scopes(project_id);
 `);
 
 const projectGroupSlugRows = sqlite.prepare("SELECT slug FROM project_groups").all() as Array<{ slug: string }>;
