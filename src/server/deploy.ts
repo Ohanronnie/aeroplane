@@ -31,6 +31,7 @@ import { railpackBuildEnv, railpackBuildEnvArgs } from "./railpack-build-env.js"
 import { saveRedisDatasetIfRunning, stopRedisContainerForReplacement } from "./redis-persistence.js";
 import { deploymentConcurrency } from "./system-settings.js";
 import { buildkitStartHint, ensureBuildkitRunning } from "./buildkit.js";
+import { detectDockerfileBuild, dockerBuildArgs } from "./dockerfile-build.js";
 import { dockerImageForService, isDockerImageService } from "../shared/service-source.js";
 import { ensurePostgresLogicalReplication } from "./postgres-logical-replication.js";
 import { isWorkerService } from "../shared/service-runtime.js";
@@ -1093,73 +1094,104 @@ async function runDeployment(deployment: Deployment, service: Service) {
       await runCommand("git", ["checkout", deployment.commitSha], deployment.id, { cwd: sourceDir });
     }
 
-    const savedInstallCommand = service.installCommand ?? "";
-    const buildCommand = service.buildCommand ?? "";
-    const startCommand = service.startCommand ?? "";
-    const packageManager = detectPackageManager(sourceDir, [savedInstallCommand, buildCommand, startCommand]);
-    const installCommand = savedInstallCommand;
-    const hasCommandOverrides = Boolean(installCommand || buildCommand || startCommand);
-    const looksLikeBunProject = packageManager === "bun";
     const isStaticService = Boolean(service.staticOutput?.trim());
     const isWorker = isWorkerService(service);
     const buildEnv = isWorker ? env : railpackBuildEnv(env, runtimePort);
 
-    const railpackEnv: Record<string, string> = {
-      ...env,
-      BUILDKIT_HOST: config.buildkitHost,
-      ...(isWorker ? {} : { PORT: String(runtimePort) }),
-      // Railpack/Railway docs currently reference mixed naming for these overrides.
-      // Pass both variants so saved service commands actually win over auto-detection.
-      RAILPACK_START_CMD: startCommand,
-      RAILPACK_START_COMMAND: startCommand,
-      RAILPACK_BUILD_CMD: buildCommand,
-      RAILPACK_BUILD_COMMAND: buildCommand,
-      RAILPACK_INSTALL_CMD: installCommand,
-      RAILPACK_INSTALL_COMMAND: installCommand,
-      RAILPACK_PACKAGES: looksLikeBunProject ? "bun@latest" : "",
-      FORCE_COLOR: "1"
-    };
+    const dockerfileDetection = detectDockerfileBuild({ service, appDir, env });
+    for (const warning of dockerfileDetection.warnings) {
+      appendDeploymentLog(deployment.id, warning, "system", secrets);
+    }
+    if (service.detectedBuildMethod !== dockerfileDetection.method) {
+      db.update(services).set({ detectedBuildMethod: dockerfileDetection.method }).where(eq(services.id, service.id)).run();
+    }
 
-    Object.keys(railpackEnv).forEach((key) => {
-      if (!railpackEnv[key]) {
-        delete railpackEnv[key];
+    if (dockerfileDetection.method === "dockerfile" && dockerfileDetection.dockerfilePath) {
+      appendDeploymentLog(deployment.id, `Found ${dockerfileDetection.dockerfileRelativePath} — building with docker build and bypassing Railpack.`);
+      const ignoredOverrides = [
+        service.installCommand ? "install" : "",
+        service.buildCommand ? "build" : "",
+        service.startCommand ? "start" : ""
+      ].filter(Boolean);
+      if (ignoredOverrides.length > 0) {
+        appendDeploymentLog(
+          deployment.id,
+          `Custom ${ignoredOverrides.join("/")} command settings are ignored for Dockerfile builds; the Dockerfile controls how the image is built and started.`
+        );
       }
-    });
+      await ensureDockerAvailable(deployment.id);
+      await runCommand(
+        "docker",
+        dockerBuildArgs(imageTag, dockerfileDetection.dockerfilePath, buildEnv, appDir),
+        deployment.id,
+        { env: { DOCKER_BUILDKIT: "1" }, redact: secrets }
+      );
+    } else {
+      const savedInstallCommand = service.installCommand ?? "";
+      const buildCommand = service.buildCommand ?? "";
+      const startCommand = service.startCommand ?? "";
+      const packageManager = detectPackageManager(sourceDir, [savedInstallCommand, buildCommand, startCommand]);
+      const installCommand = savedInstallCommand;
+      const hasCommandOverrides = Boolean(installCommand || buildCommand || startCommand);
+      const looksLikeBunProject = packageManager === "bun";
 
-    if (savedInstallCommand) {
-      appendDeploymentLog(deployment.id, `Using custom install command: ${installCommand}`, "system", secrets);
-    }
-    if (buildCommand) {
-      appendDeploymentLog(deployment.id, `Using custom build command: ${buildCommand}`, "system", secrets);
-    }
-    if (startCommand) {
-      appendDeploymentLog(deployment.id, `Using custom start command: ${startCommand}`, "system", secrets);
-    }
+      const railpackEnv: Record<string, string> = {
+        ...env,
+        BUILDKIT_HOST: config.buildkitHost,
+        ...(isWorker ? {} : { PORT: String(runtimePort) }),
+        // Railpack/Railway docs currently reference mixed naming for these overrides.
+        // Pass both variants so saved service commands actually win over auto-detection.
+        RAILPACK_START_CMD: startCommand,
+        RAILPACK_START_COMMAND: startCommand,
+        RAILPACK_BUILD_CMD: buildCommand,
+        RAILPACK_BUILD_COMMAND: buildCommand,
+        RAILPACK_INSTALL_CMD: installCommand,
+        RAILPACK_INSTALL_COMMAND: installCommand,
+        RAILPACK_PACKAGES: looksLikeBunProject ? "bun@latest" : "",
+        FORCE_COLOR: "1"
+      };
 
-    if (hasCommandOverrides) {
-      appendDeploymentLog(deployment.id, "Applying command overrides through Railpack.");
+      Object.keys(railpackEnv).forEach((key) => {
+        if (!railpackEnv[key]) {
+          delete railpackEnv[key];
+        }
+      });
+
+      if (savedInstallCommand) {
+        appendDeploymentLog(deployment.id, `Using custom install command: ${installCommand}`, "system", secrets);
+      }
+      if (buildCommand) {
+        appendDeploymentLog(deployment.id, `Using custom build command: ${buildCommand}`, "system", secrets);
+      }
+      if (startCommand) {
+        appendDeploymentLog(deployment.id, `Using custom start command: ${startCommand}`, "system", secrets);
+      }
+
+      if (hasCommandOverrides) {
+        appendDeploymentLog(deployment.id, "Applying command overrides through Railpack.");
+      }
+      await ensureBuildkitAvailable(deployment.id);
+      const railpackArgs = ["build", "--name", imageTag, "--progress", "plain", "--cache-key", service.id];
+      railpackArgs.push(...railpackBuildEnvArgs(buildEnv));
+      const railpackConfigFile = railpackEnv.RAILPACK_CONFIG_FILE;
+      if (railpackConfigFile) {
+        appendDeploymentLog(deployment.id, `Using Railpack config file: ${railpackConfigFile}`, "system", secrets);
+        railpackArgs.push("--config-file", railpackConfigFile);
+      }
+      if (buildCommand) {
+        railpackArgs.push("--build-cmd", buildCommand);
+      }
+      if (startCommand) {
+        railpackArgs.push("--start-cmd", startCommand);
+      }
+      railpackArgs.push(appDir);
+      await runCommand(
+        "railpack",
+        railpackArgs,
+        deployment.id,
+        { env: railpackEnv, redact: secrets }
+      );
     }
-    await ensureBuildkitAvailable(deployment.id);
-    const railpackArgs = ["build", "--name", imageTag, "--progress", "plain", "--cache-key", service.id];
-    railpackArgs.push(...railpackBuildEnvArgs(buildEnv));
-    const railpackConfigFile = railpackEnv.RAILPACK_CONFIG_FILE;
-    if (railpackConfigFile) {
-      appendDeploymentLog(deployment.id, `Using Railpack config file: ${railpackConfigFile}`, "system", secrets);
-      railpackArgs.push("--config-file", railpackConfigFile);
-    }
-    if (buildCommand) {
-      railpackArgs.push("--build-cmd", buildCommand);
-    }
-    if (startCommand) {
-      railpackArgs.push("--start-cmd", startCommand);
-    }
-    railpackArgs.push(appDir);
-    await runCommand(
-      "railpack",
-      railpackArgs,
-      deployment.id,
-      { env: railpackEnv, redact: secrets }
-    );
 
     if (isStaticService) {
       await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => {
