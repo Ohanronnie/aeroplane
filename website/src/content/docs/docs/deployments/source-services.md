@@ -31,7 +31,15 @@ The root directory matters for monorepos. Choose the folder that contains the ap
 
 ## Build Detection and Overrides
 
-Aeroplane uses Railpack through BuildKit to detect and build the app. Leave install, build, and start commands blank when auto detection is correct.
+After cloning the repository, Aeroplane checks for a `Dockerfile` at the service root. When one exists, the deployment builds it with `docker build` and skips Railpack entirely — the Dockerfile controls how the image is built and started. Otherwise Aeroplane uses Railpack through BuildKit to detect and build the app. Leave install, build, and start commands blank when auto detection is correct.
+
+The build method can be pinned per service in Settings:
+
+- **Auto** (default) — use the Dockerfile when present, otherwise Railpack.
+- **Dockerfile** — always build with the Dockerfile; the deployment fails if it is missing.
+- **Railpack** — always build with Railpack, even when a Dockerfile is present.
+
+A Dockerfile in a non-standard location can be selected with the Dockerfile path setting, or with the `AEROPLANE_DOCKERFILE_PATH` service environment variable (the variable wins when both are set). Paths are relative to the service root directory. Install, build, and start command overrides apply only to Railpack builds.
 
 Use command overrides when:
 
