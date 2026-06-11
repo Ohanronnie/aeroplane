@@ -10,6 +10,8 @@ export type ServiceFormPayload = {
   buildCommand?: string;
   startCommand?: string;
   staticOutput?: string;
+  buildMethod?: "auto" | "railpack" | "dockerfile";
+  dockerfilePath?: string;
   runtimeMode?: "web" | "worker";
   databasePublicEnabled?: boolean;
   databasePublicHostname?: string;
