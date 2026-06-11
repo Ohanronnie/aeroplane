@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS projects (
   build_command TEXT,
   start_command TEXT,
   static_output TEXT,
+  build_method TEXT NOT NULL DEFAULT 'auto',
+  dockerfile_path TEXT,
+  detected_build_method TEXT,
   runtime_mode TEXT NOT NULL DEFAULT 'web',
   internal_port INTEGER NOT NULL,
   host_port INTEGER NOT NULL UNIQUE,
@@ -238,6 +241,18 @@ if (!hasColumn("projects", "database_public_hostname")) {
 
 if (!hasColumn("projects", "postgres_logical_replication_enabled")) {
   sqlite.exec("ALTER TABLE projects ADD COLUMN postgres_logical_replication_enabled INTEGER NOT NULL DEFAULT 0");
+}
+
+if (!hasColumn("projects", "build_method")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN build_method TEXT NOT NULL DEFAULT 'auto'");
+}
+
+if (!hasColumn("projects", "dockerfile_path")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT");
+}
+
+if (!hasColumn("projects", "detected_build_method")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN detected_build_method TEXT");
 }
 
 if (!hasColumn("database_backups", "trigger")) {
