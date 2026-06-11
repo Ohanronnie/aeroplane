@@ -72,6 +72,15 @@ function valueOrAuto(value: null | string) {
   return value?.trim() || "auto";
 }
 
+function buildMethodLabel(service: Service) {
+  const dockerfile = service.dockerfilePath?.trim() || "Dockerfile";
+  if (service.buildMethod === "dockerfile") return dockerfile;
+  if (service.buildMethod === "railpack") return "Railpack";
+  if (service.detectedBuildMethod === "dockerfile") return `${dockerfile} (detected)`;
+  if (service.detectedBuildMethod === "railpack") return "Railpack (detected)";
+  return "auto";
+}
+
 function linkedServiceSlugs(env: EnvVar[]) {
   const slugs = new Set<string>();
   const referenceRegex = /\${([a-zA-Z0-9_.-]+)\.[a-zA-Z0-9_.-]+}/g;
@@ -293,6 +302,7 @@ export function ServiceOverviewPanel({
             <div>
               <DefinitionRow label="Mode" value={isDatabase ? "Database" : isWorker ? "Background worker" : "Web service"} />
               <DefinitionRow label="Root directory" value={rootDir} />
+              {!isDatabase ? <DefinitionRow label="Builder" value={buildMethodLabel(service)} /> : null}
               <DefinitionRow label="Install" value={valueOrAuto(service.installCommand)} />
               <DefinitionRow label="Build" value={valueOrAuto(service.buildCommand)} />
               <DefinitionRow label="Start" value={valueOrAuto(service.startCommand)} />
