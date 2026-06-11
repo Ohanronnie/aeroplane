@@ -19,6 +19,7 @@ import { config } from "./config.js";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
 import { abortDeployment, allocateHostPort, containerNameForService, enqueueDeployment, getServiceById, removeServiceRuntime, startDeployWorker, staticSiteDirForService } from "./deploy.js";
 import { db, nowIso } from "./db.js";
+import { normalizeServiceBuildMethod, serviceBuildMethods } from "./dockerfile-build.js";
 import { detectFramework, detectFrameworkPreview } from "./frameworks.js";
 import { frameworkIconAsset, frameworkIconUrl, prewarmFrameworkIconCache } from "./framework-icons.js";
 import { DATABASE_ICON_CATALOG, FRAMEWORK_ICON_CATALOG } from "./framework-icon-catalog.js";
@@ -168,6 +169,20 @@ const optionalRootDir = z
   .optional()
   .transform((value) => (value ? value.replace(/^\/+|\/+$/g, "") : undefined))
   .refine((value) => value === undefined || !value.split("/").includes(".."), { message: "Invalid directory path" });
+const optionalDockerfilePath = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value.replace(/^\/+/, "") : undefined))
+  .refine((value) => value === undefined || !value.split("/").includes(".."), { message: "Invalid Dockerfile path" });
+const clearableDockerfilePath = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim().replace(/^\/+/, "");
+  return trimmed || null;
+}, z.string().nullable().optional()).refine(
+  (value) => value === undefined || value === null || !value.split("/").includes(".."),
+  { message: "Invalid Dockerfile path" }
+);
 const repoSchema = z.string().trim().min(1).refine((value) => {
   return value.startsWith("https://") || value.startsWith("git@") || value === "database" || value === DOCKER_IMAGE_REPO_URL;
 }, {
@@ -215,6 +230,8 @@ const serviceSettingsSchema = z.object({
   buildCommand: optionalCommand,
   startCommand: optionalCommand,
   staticOutput: optionalString,
+  buildMethod: z.enum(serviceBuildMethods).optional(),
+  dockerfilePath: optionalDockerfilePath,
   runtimeMode: serviceRuntimeModeSchema,
   internalPort: z.coerce.number().int().min(1).max(65535).default(8080),
   databasePublicEnabled: z.boolean().optional().default(true),
@@ -428,6 +445,8 @@ const updateServiceSchema = z.object({
   buildCommand: clearableCommand,
   startCommand: clearableCommand,
   staticOutput: clearableString,
+  buildMethod: z.enum(serviceBuildMethods).optional(),
+  dockerfilePath: clearableDockerfilePath,
   runtimeMode: z.enum(serviceRuntimeModes).optional(),
   internalPort: z.coerce.number().int().min(1).max(65535).optional(),
   databasePublicEnabled: z.boolean().optional(),
@@ -722,6 +741,9 @@ async function publicService(service: Service, options: PublicServiceOptions = {
     buildCommand: service.buildCommand,
     startCommand: service.startCommand,
     staticOutput: service.staticOutput,
+    buildMethod: normalizeServiceBuildMethod(service.buildMethod),
+    dockerfilePath: service.dockerfilePath,
+    detectedBuildMethod: service.detectedBuildMethod,
     runtimeMode: normalizeServiceRuntimeMode(service.runtimeMode),
     internalPort: service.internalPort,
     hostPort: service.hostPort,
@@ -794,6 +816,9 @@ function createServiceRecord(projectId: string, input: z.infer<typeof createServ
     buildCommand: input.buildCommand ?? null,
     startCommand: input.startCommand ?? null,
     staticOutput: input.staticOutput ?? null,
+    buildMethod: input.buildMethod ?? "auto",
+    dockerfilePath: input.dockerfilePath ?? null,
+    detectedBuildMethod: null,
     runtimeMode: isDatabase || input.staticOutput ? "web" : input.runtimeMode,
     internalPort: input.internalPort,
     hostPort: allocateHostPort(),
