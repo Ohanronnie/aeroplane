@@ -52,6 +52,7 @@ import { RuntimeLogsPanel } from "./service-log-panels";
 import { ServiceOverviewPanel } from "./service-overview-panel";
 import { ServicePageSkeleton } from "./service-page-skeleton";
 import { RedeployRequiredToast } from "./redeploy-required-toast";
+import { BuildMethodControl } from "../../components/ui/build-method-control";
 import { RuntimeModeControl } from "../../components/ui/runtime-mode-control";
 import type { ServiceTab } from "./service-tabs";
 import { dockerImageForService, dockerImageRepoFullName, isDatabaseService, isDockerImageService } from "../../../shared/service-source";
@@ -73,6 +74,8 @@ type ServiceSettingsState = {
   buildCommand: string;
   startCommand: string;
   staticOutput: string;
+  buildMethod: "auto" | "railpack" | "dockerfile";
+  dockerfilePath: string;
   runtimeMode: "web" | "worker";
   internalPort: number;
   databasePublicEnabled: boolean;
@@ -102,6 +105,8 @@ function settingsFromService(service: Service): ServiceSettingsState {
     buildCommand: service.buildCommand ?? "",
     startCommand: service.startCommand ?? "",
     staticOutput: service.staticOutput ?? "",
+    buildMethod: service.buildMethod,
+    dockerfilePath: service.dockerfilePath ?? "",
     runtimeMode: service.runtimeMode,
     internalPort: service.internalPort,
     databasePublicEnabled: service.databasePublicEnabled,
@@ -163,6 +168,8 @@ export function ServicePageShell({
     buildCommand: "",
     startCommand: "",
     staticOutput: "",
+    buildMethod: "auto" as "auto" | "railpack" | "dockerfile",
+    dockerfilePath: "",
     runtimeMode: "web" as "web" | "worker",
     internalPort: 8080,
     databasePublicEnabled: true,
@@ -460,6 +467,7 @@ export function ServicePageShell({
       buildCommand: formValue(form, "buildCommand", settings.buildCommand),
       startCommand: formValue(form, "startCommand", settings.startCommand),
       staticOutput: formValue(form, "staticOutput", settings.staticOutput),
+      dockerfilePath: formValue(form, "dockerfilePath", settings.dockerfilePath),
       internalPort: formNumberValue(form, "internalPort", settings.internalPort),
       databasePublicHostname: formValue(form, "databasePublicHostname", settings.databasePublicHostname)
     };
@@ -481,6 +489,8 @@ export function ServicePageShell({
         buildCommand: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.buildCommand),
         startCommand: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.startCommand),
         staticOutput: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.staticOutput),
+        buildMethod: isDatabase || isDockerImage ? undefined : submittedSettings.buildMethod,
+        dockerfilePath: isDatabase || isDockerImage ? undefined : textOrNull(submittedSettings.dockerfilePath),
         runtimeMode: isDatabase ? undefined : submittedSettings.runtimeMode,
         internalPort: Number(submittedSettings.internalPort),
         databasePublicEnabled: isDatabase ? true : undefined,
@@ -858,6 +868,24 @@ export function ServicePageShell({
                             <FormInput name="internalPort" type="number" value={settings.internalPort} onChange={(event) => setSettings((current) => ({ ...current, internalPort: Number(event.target.value) }))} />
                           </div>
                         ) : null}
+                        <div className="xl:col-span-2">
+                          <FieldLabel>Build method</FieldLabel>
+                          <BuildMethodControl
+                            value={settings.buildMethod}
+                            onChange={(buildMethod) => setSettings((current) => ({ ...current, buildMethod }))}
+                          />
+                          <p className="mt-2 text-xs leading-5 text-zinc-500">
+                            Auto uses your repository’s Dockerfile when one exists, otherwise Railpack builds the project.
+                          </p>
+                        </div>
+                        {settings.buildMethod !== "railpack" ? (
+                          <div>
+                            <FieldLabel>Dockerfile path</FieldLabel>
+                            <FormInput name="dockerfilePath" value={settings.dockerfilePath} onChange={(event) => setSettings((current) => ({ ...current, dockerfilePath: event.target.value }))} placeholder="Dockerfile" />
+                          </div>
+                        ) : (
+                          <input type="hidden" name="dockerfilePath" value={settings.dockerfilePath} />
+                        )}
                         <div>
                           <FieldLabel>Install command</FieldLabel>
                           <FormInput name="installCommand" value={settings.installCommand} onChange={(event) => setSettings((current) => ({ ...current, installCommand: event.target.value }))} placeholder="auto" />
