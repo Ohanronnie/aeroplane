@@ -35,6 +35,8 @@ Payload:
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "startCommand": "npm start",
+  "buildMethod": "auto",
+  "dockerfilePath": null,
   "runtimeMode": "web",
   "internalPort": 3000,
   "env": [
@@ -42,6 +44,14 @@ Payload:
   ]
 }
 ```
+
+`buildMethod` controls how the image is built:
+
+- `auto` (default) — if the repository contains a `Dockerfile` at its root, the deployment builds it with `docker build`; otherwise Railpack analyzes the project.
+- `dockerfile` — always build with the repository's Dockerfile. The deployment fails if it is missing.
+- `railpack` — always build with Railpack, even when a Dockerfile is present.
+
+`dockerfilePath` optionally points at a Dockerfile in a non-standard location, relative to the service root directory (for example `docker/Dockerfile.web`). The `AEROPLANE_DOCKERFILE_PATH` service environment variable takes precedence when set. Custom install, build, and start commands do not apply to Dockerfile builds.
 
 Use `repoFullName` for GitHub repositories. Use `repoUrl` instead for a direct Git URL:
 
@@ -93,6 +103,9 @@ Response:
     "buildCommand": null,
     "startCommand": null,
     "staticOutput": null,
+    "buildMethod": "auto",
+    "dockerfilePath": null,
+    "detectedBuildMethod": null,
     "runtimeMode": "web",
     "internalPort": 3000,
     "hostPort": 41001,
@@ -248,10 +261,14 @@ Payload:
   "rootDir": "apps/web",
   "buildCommand": "npm run build",
   "startCommand": "npm start",
+  "buildMethod": "auto",
+  "dockerfilePath": null,
   "runtimeMode": "web",
   "internalPort": 3000
 }
 ```
+
+`detectedBuildMethod` in service responses reports which builder the most recent deployment actually used (`dockerfile` or `railpack`); it is `null` until a deployment has run.
 
 Response:
 
