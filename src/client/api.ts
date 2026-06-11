@@ -14,6 +14,8 @@ export type FrameworkIconAsset = Framework & {
 
 export type ServiceRuntimeMode = "web" | "worker";
 
+export type ServiceBuildMethod = "auto" | "railpack" | "dockerfile";
+
 export type Service = {
   id: string;
   projectId: string;
@@ -29,6 +31,9 @@ export type Service = {
   buildCommand: null | string;
   startCommand: null | string;
   staticOutput: null | string;
+  buildMethod: ServiceBuildMethod;
+  dockerfilePath: null | string;
+  detectedBuildMethod: null | "railpack" | "dockerfile";
   runtimeMode: ServiceRuntimeMode;
   internalPort: number;
   hostPort: number;
