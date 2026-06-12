@@ -359,6 +359,16 @@ export type AuthUser = {
   role: string;
 };
 
+export type ManagedUser = AuthUser & {
+  projectCount: number;
+  serviceCount: number;
+  activeServiceCount: number;
+  apiKeyCount: number;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: null | string;
+};
+
 export type AuthStatus = {
   setupComplete: boolean;
   authenticated: boolean;
@@ -829,6 +839,12 @@ export const api = {
     databaseBackupsAutomaticEnabled?: boolean;
   }) =>
     request<{ ok: boolean; settings: SystemSettings; caddy?: { ok: boolean; detail: string } }>("/api/system/settings", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  systemUsers: () => request<{ users: ManagedUser[] }>("/api/system/users"),
+  createSystemUser: (body: { email: string; password: string }) =>
+    request<{ user: ManagedUser }>("/api/system/users", {
       method: "POST",
       body: JSON.stringify(body)
     }),
