@@ -3,6 +3,7 @@ import { AddSquareIcon, FolderCodeIcon } from "@hugeicons/core-free-icons";
 import { startTransition, useCallback, useEffect, useState } from "react";
 import {
   api,
+  type AuthUser,
   type GitHubStatus,
   type ProjectCard,
   type R2SettingsStatus,
@@ -28,6 +29,7 @@ export function ProjectsPage() {
 
   const [projects, setProjects] = useState<ProjectCard[]>([]);
   const [tools, setTools] = useState<ToolCheck[]>([]);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [githubStatus, setGitHubStatus] = useState<null | GitHubStatus>(null);
   const [domainSettings, setDomainSettings] = useState<null | Awaited<
     ReturnType<typeof api.systemSettings>
@@ -43,10 +45,11 @@ export function ProjectsPage() {
     const showLoading = options.showLoading ?? true;
     if (showLoading) setSetupLoading(true);
     try {
-      const [projectData, systemData, githubData, domainData, r2Data] =
+      const [authData, projectData, systemData, githubData, domainData, r2Data] =
         await Promise.all([
+          api.authStatus(),
           api.projects(),
-          api.system(),
+          api.system().catch(() => ({ tools: [] })),
           api.githubStatus().catch(() => null),
           api.systemSettings().catch(() => null),
           api
@@ -55,6 +58,7 @@ export function ProjectsPage() {
             .catch(() => null),
         ]);
       startTransition(() => {
+        setCurrentUser(authData.user);
         setProjects(projectData.projects);
         setTools(systemData.tools);
         setGitHubStatus(githubData);
@@ -152,6 +156,8 @@ export function ProjectsPage() {
     });
   }
 
+  const owner = currentUser?.role === "owner";
+
   return (
     <>
       <main className="relative isolate min-h-dvh overflow-hidden bg-zinc-950 text-zinc-100">
@@ -184,9 +190,11 @@ export function ProjectsPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="hidden sm:block">
-                <SystemHealthPill tools={tools} />
-              </div>
+              {owner ? (
+                <div className="hidden sm:block">
+                  <SystemHealthPill tools={tools} />
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="inline-flex h-9 items-center justify-center gap-2 border border-[#E93D82]/45 bg-[#E93D82]/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#E93D82] transition-colors hover:bg-[#E93D82]/20"
@@ -214,7 +222,7 @@ export function ProjectsPage() {
             </div>
           ) : null}
 
-          {!setupLoading ? (
+          {!setupLoading && owner ? (
             <SetupTodoList
               domainSettings={domainSettings}
               githubStatus={githubStatus}
