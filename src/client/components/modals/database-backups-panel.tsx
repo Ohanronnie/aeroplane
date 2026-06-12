@@ -19,6 +19,7 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
   const [deleteId, setDeleteId] = useState("");
   const [restoreId, setRestoreId] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [owner, setOwner] = useState(false);
   const [draftStorage, setDraftStorage] = useState<BackupStorageTarget>("disk");
   const [draftScheduleEnabled, setDraftScheduleEnabled] = useState<BackupScheduleEnabled>({
     ...disabledBackupScheduleEnabled
@@ -27,7 +28,8 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
   const [success, setSuccess] = useState("");
 
   const r2Connected = r2?.connected ?? false;
-  const activeSettings = settings ?? defaultSettings(r2Connected);
+  const r2Available = owner && r2Connected;
+  const activeSettings = settings ?? defaultSettings(r2Available);
 
   const loadBackups = useCallback(async () => {
     setBusy((current) => current || "load");
@@ -49,6 +51,18 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
   useEffect(() => {
     void loadBackups();
   }, [loadBackups]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.authStatus().then((status) => {
+      if (!cancelled) setOwner(status.user?.role === "owner");
+    }).catch(() => {
+      if (!cancelled) setOwner(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function createBackup() {
     setBusy("backup");
@@ -141,7 +155,7 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
           <div>
             <h3 className="font-hero text-xl text-zinc-100">Backups</h3>
             <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-              {storageLabel(activeSettings.storage, r2Connected)} by default
+              {storageLabel(activeSettings.storage, r2Available)} by default
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -165,7 +179,7 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
           </div>
         </div>
 
-        {r2Connected ? (
+        {r2Available ? (
           <div className="flex flex-wrap items-center gap-2 border border-zinc-800 bg-zinc-950/45 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
             <span className="text-[#7fe3dd]">{r2?.bucket}</span>
             <span>{r2?.endpoint}</span>
@@ -198,7 +212,8 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
       <BackupSettingsModal
         open={settingsOpen}
         activeSettings={activeSettings}
-        r2Connected={r2Connected}
+        r2Connected={r2Available}
+        showRemoteStorageOptions={owner}
         draftStorage={draftStorage}
         draftScheduleEnabled={draftScheduleEnabled}
         saving={savingSettings}
