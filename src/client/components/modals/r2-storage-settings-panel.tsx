@@ -12,6 +12,8 @@ type R2FormState = {
   createBucket: boolean;
 };
 
+type R2StorageSettingsMode = "system" | "account";
+
 const emptyR2: R2SettingsStatus = {
   connected: false,
   accountId: "",
@@ -42,7 +44,31 @@ function formFromR2(r2: R2SettingsStatus): R2FormState {
   };
 }
 
-export function R2StorageSettingsPanel({ open }: { open: boolean }) {
+function modeCopy(mode: R2StorageSettingsMode) {
+  return mode === "account"
+    ? {
+        eyebrow: "Backup storage",
+        connectedDescription: "Database backups for your projects can upload to this bucket after the local disk backup is created.",
+        editTitle: "Edit backup storage",
+        connectTitle: "Connect backup storage",
+        formDescription: "Store your R2 credentials for database backups on your projects.",
+        saved: "Backup storage connection saved.",
+        removed: "Backup storage connection removed.",
+        loadError: "Could not load backup storage settings"
+      }
+    : {
+        eyebrow: "R2 storage",
+        connectedDescription: "Database backups can upload to this bucket after the local disk backup is created.",
+        editTitle: "Edit R2 connection",
+        connectTitle: "Connect R2",
+        formDescription: "Store R2 credentials in Aeroplane for database backups.",
+        saved: "R2 connection saved.",
+        removed: "R2 connection removed.",
+        loadError: "Could not load R2 settings"
+      };
+}
+
+export function R2StorageSettingsPanel({ open, mode = "system" }: { open: boolean; mode?: R2StorageSettingsMode }) {
   const [r2, setR2] = useState<R2SettingsStatus>(emptyR2);
   const [form, setForm] = useState<R2FormState>(blankForm);
   const [editing, setEditing] = useState(false);
@@ -50,6 +76,7 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+  const copy = modeCopy(mode);
 
   useEffect(() => {
     if (!open) return;
@@ -57,7 +84,8 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
     setError("");
     setSuccess("");
 
-    void api.r2Settings()
+    const load = mode === "account" ? api.backupR2Settings : api.r2Settings;
+    void load()
       .then((result) => {
         if (cancelled) return;
         setR2(result.r2);
@@ -66,13 +94,13 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
         setDisconnecting(false);
       })
       .catch((issue) => {
-        if (!cancelled) setError(issue instanceof Error ? issue.message : "Could not load R2 settings");
+        if (!cancelled) setError(issue instanceof Error ? issue.message : copy.loadError);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [copy.loadError, mode, open]);
 
   async function saveConnection(event: FormEvent) {
     event.preventDefault();
@@ -80,7 +108,8 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
     setError("");
     setSuccess("");
     try {
-      const result = await api.updateR2Settings({
+      const save = mode === "account" ? api.updateBackupR2Settings : api.updateR2Settings;
+      const result = await save({
         accountId: form.accountId.trim(),
         bucket: form.bucket.trim(),
         accessKeyId: form.accessKeyId.trim(),
@@ -91,7 +120,7 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
       setForm(formFromR2(result.r2));
       setEditing(false);
       setDisconnecting(false);
-      setSuccess("R2 connection saved.");
+      setSuccess(copy.saved);
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "Could not save R2 connection");
     } finally {
@@ -104,12 +133,13 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
     setError("");
     setSuccess("");
     try {
-      const result = await api.disconnectR2();
+      const disconnectR2 = mode === "account" ? api.disconnectBackupR2 : api.disconnectR2;
+      const result = await disconnectR2();
       setR2(result.r2);
       setForm(blankForm());
       setEditing(true);
       setDisconnecting(false);
-      setSuccess("R2 connection removed.");
+      setSuccess(copy.removed);
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "Could not disconnect R2");
     } finally {
@@ -123,10 +153,10 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
         <section className="border border-zinc-800 bg-zinc-950/45 p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">R2 storage</div>
+              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">{copy.eyebrow}</div>
               <h3 className="mt-2 font-hero text-2xl tracking-tight text-zinc-100">{r2.bucket}</h3>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-                Database backups can upload to this bucket after the local disk backup is created.
+                {copy.connectedDescription}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -161,7 +191,7 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border border-rose-500/35 bg-rose-950/20 px-4 py-3">
               <div>
                 <div className="text-sm font-semibold text-rose-100">Disconnect R2?</div>
-                <div className="mt-1 text-xs text-rose-200/75">Existing backup records stay in Aeroplane; future R2 uploads will be disabled.</div>
+                <div className="mt-1 text-xs text-rose-200/75">Existing backup records stay in Aeroplane; future R2 uploads will be disabled for this connection.</div>
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" className="inline-flex h-9 w-9 items-center justify-center border border-rose-500/40 bg-rose-500/10 text-rose-200" onClick={() => void disconnect()} disabled={busy} title="Yes" aria-label="Yes">
@@ -183,9 +213,9 @@ export function R2StorageSettingsPanel({ open }: { open: boolean }) {
               <AppIcon icon={CloudUploadIcon} size={18} />
             </div>
             <div>
-              <h3 className="font-hero text-lg tracking-tight text-zinc-100">{r2.connected ? "Edit R2 connection" : "Connect R2"}</h3>
+              <h3 className="font-hero text-lg tracking-tight text-zinc-100">{r2.connected ? copy.editTitle : copy.connectTitle}</h3>
               <p className="mt-1 text-sm leading-relaxed text-zinc-400">
-                Store R2 credentials in Aeroplane for database backups.
+                {copy.formDescription}
               </p>
             </div>
           </div>
