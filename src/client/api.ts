@@ -874,6 +874,19 @@ export const api = {
       body: JSON.stringify(body)
     }),
   disconnectR2: () => request<{ ok: boolean; r2: R2SettingsStatus }>("/api/system/r2", { method: "DELETE" }),
+  backupR2Settings: () => request<{ r2: R2SettingsStatus }>("/api/system/backup-storage/r2"),
+  updateBackupR2Settings: (body: {
+    accountId: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey?: string;
+    createBucket?: boolean;
+  }) =>
+    request<{ ok: boolean; r2: R2SettingsStatus }>("/api/system/backup-storage/r2", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
+  disconnectBackupR2: () => request<{ ok: boolean; r2: R2SettingsStatus }>("/api/system/backup-storage/r2", { method: "DELETE" }),
   dnsSettings: () => request<{ dns: DnsSettingsStatus }>("/api/system/dns"),
   updateDnsProvider: (providerId: DnsProviderId, body: Record<string, string>) =>
     request<{ ok: boolean; dns: DnsSettingsStatus }>(`/api/system/dns/${providerId}`, {
