@@ -87,6 +87,7 @@ import {
   requireAuth
 } from "./auth.js";
 import { registerApiKeyRoutes } from "./api-key-routes.js";
+import { registerBackupStorageRoutes } from "./backup-storage-routes.js";
 import {
   actorUserId,
   canAccessProject,
@@ -100,7 +101,7 @@ import {
   requireSessionAccessMiddleware
 } from "./api-access-control.js";
 import { registerSystemUserRoutes } from "./system-user-routes.js";
-import { getUserAiSettings, publicUserAiSettings, saveUserAiSettings } from "./user-settings.js";
+import { getUserAiSettings, publicUserAiSettings, publicUserR2Settings, saveUserAiSettings } from "./user-settings.js";
 import { managedEnvPath, writeManagedEnv, writeManagedEnvPatch } from "./env-file.js";
 import { generateSecretKey, hasSecretKey } from "./secret-crypto.js";
 import {
@@ -1092,19 +1093,18 @@ async function publicGithubSettings() {
   };
 }
 
-function backupStorageUsesOwnerR2(storage: string | null | undefined) {
-  return storage === "r2" || storage === "disk+r2";
-}
-
-function diskOnlyBackupSettings(settings: ReturnType<typeof getDatabaseBackupSettings>) {
-  return backupStorageUsesOwnerR2(settings.storage)
-    ? { ...settings, storage: "disk" as const, defaultStorage: "disk" as const }
-    : settings;
-}
-
 function publicBackupR2SettingsForRequest(c: Context) {
-  const settings = getSystemSettings();
-  return publicR2Settings(isOwnerSession(c) ? settings : { ...settings, r2: null });
+  const userId = actorUserId(c);
+  return userId ? publicUserR2Settings(userId) : publicR2Settings({ ...getSystemSettings(), r2: null });
+}
+
+function publicDatabaseBackupsForRequest(c: Context, serviceId: string) {
+  const backups = listDatabaseBackups(serviceId);
+  if (isOwnerSession(c)) return backups;
+  return backups.map((backup) => ({
+    ...backup,
+    localPath: null
+  }));
 }
 
 function updateGithubRuntimeEnv(values: ReturnType<typeof currentGithubEnv>) {
@@ -1514,6 +1514,7 @@ app.post("/api/system/settings", async (c) => {
 });
 
 registerApiKeyRoutes(app);
+registerBackupStorageRoutes(app);
 registerSystemUserRoutes(app);
 
 app.get("/api/system/r2", (c) => c.json({ r2: publicR2Settings() }));
@@ -2327,8 +2328,8 @@ app.get("/api/services/:serviceId/database/backups", (c) => {
     const serviceId = c.req.param("serviceId");
     const settings = getDatabaseBackupSettings(serviceId);
     return c.json({
-      backups: listDatabaseBackups(serviceId),
-      settings: isOwnerSession(c) ? settings : diskOnlyBackupSettings(settings),
+      backups: publicDatabaseBackupsForRequest(c, serviceId),
+      settings,
       r2: publicBackupR2SettingsForRequest(c)
     });
   } catch (error) {
@@ -2345,13 +2346,8 @@ app.patch("/api/services/:serviceId/database/backups/settings", async (c) => {
     return jsonError(body.error.issues[0]?.message ?? "Invalid backup settings");
   }
 
-  if (!isOwnerSession(c) && backupStorageUsesOwnerR2(body.data.storage)) {
-    return jsonError("Owner storage credentials cannot be used for this account.", 403);
-  }
-
   try {
-    const input = isOwnerSession(c) ? body.data : { ...body.data, storage: "disk" as const };
-    return c.json({ settings: updateDatabaseBackupSettings(c.req.param("serviceId"), input) });
+    return c.json({ settings: updateDatabaseBackupSettings(c.req.param("serviceId"), body.data) });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Could not update backup settings", 400);
   }
@@ -2366,19 +2362,9 @@ app.post("/api/services/:serviceId/database/backups", async (c) => {
     return jsonError(body.error.issues[0]?.message ?? "Invalid backup request");
   }
 
-  if (!isOwnerSession(c) && backupStorageUsesOwnerR2(body.data.storage)) {
-    return jsonError("Owner storage credentials cannot be used for this account.", 403);
-  }
-
   try {
     const serviceId = c.req.param("serviceId");
-    const requestedStorage = body.data.storage;
-    const storage = isOwnerSession(c)
-      ? requestedStorage
-      : backupStorageUsesOwnerR2(requestedStorage ?? getDatabaseBackupSettings(serviceId).storage)
-        ? "disk"
-        : requestedStorage;
-    return c.json({ backup: await createDatabaseBackup(serviceId, storage) }, 201);
+    return c.json({ backup: await createDatabaseBackup(serviceId, body.data.storage) }, 201);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Could not create backup", 400);
   }
