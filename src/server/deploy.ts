@@ -8,7 +8,7 @@ import net from "node:net";
 import { config } from "./config.js";
 import { db, nowIso, sqlite } from "./db.js";
 import { publishDeploymentLog } from "./logBus.js";
-import { deploymentLogs, deployments, domains, envVars, services, type Deployment, type Service } from "./schema.js";
+import { deploymentLogs, deployments, domains, envVars, projectGroups, services, users, type Deployment, type Service } from "./schema.js";
 import { writeAndReloadCaddy } from "./caddy.js";
 import { getCloneTokenForRepo } from "./github-connect.js";
 import { resolveServiceEnv } from "./variable-resolver.js";
@@ -201,6 +201,23 @@ function cloneUrlWithToken(repoUrl: string, token?: string | null) {
   url.username = "x-access-token";
   url.password = token;
   return url.toString();
+}
+
+function serviceCanUseInstanceGithubCredentials(service: Service) {
+  const projectOwner = db
+    .select({ role: users.role })
+    .from(projectGroups)
+    .leftJoin(users, eq(users.id, projectGroups.ownerUserId))
+    .where(eq(projectGroups.id, service.projectId))
+    .get();
+  return projectOwner?.role === "owner";
+}
+
+async function cloneAuthTokenForService(service: Service) {
+  if (service.githubToken) return service.githubToken;
+  if (!serviceCanUseInstanceGithubCredentials(service)) return null;
+  if (service.repoFullName) return getCloneTokenForRepo(service.repoFullName);
+  return config.githubAccessToken;
 }
 
 async function ensureBuildkitAvailable(deploymentId: string) {
@@ -1081,7 +1098,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
       return;
     }
 
-    const authToken = service.repoFullName ? await getCloneTokenForRepo(service.repoFullName) : service.githubToken ?? config.githubAccessToken;
+    const authToken = await cloneAuthTokenForService(service);
     if (authToken) {
       secrets.push(authToken);
     }
