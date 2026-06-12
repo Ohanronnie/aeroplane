@@ -19,6 +19,7 @@ sqlite.pragma("foreign_keys = ON");
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS project_groups (
   id TEXT PRIMARY KEY,
+  owner_user_id TEXT,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
   description TEXT,
@@ -211,6 +212,10 @@ if (!hasColumn("projects", "project_group_id")) {
   sqlite.exec("ALTER TABLE projects ADD COLUMN project_group_id TEXT");
 }
 
+if (!hasColumn("project_groups", "owner_user_id")) {
+  sqlite.exec("ALTER TABLE project_groups ADD COLUMN owner_user_id TEXT");
+}
+
 if (!hasColumn("projects", "slug")) {
   sqlite.exec("ALTER TABLE projects ADD COLUMN slug TEXT");
 }
@@ -279,6 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_deployments_project_created ON deployments(projec
 CREATE INDEX IF NOT EXISTS idx_logs_deployment_created ON deployment_logs(deployment_id, id ASC);
 CREATE INDEX IF NOT EXISTS idx_env_project_key ON env_vars(project_id, key);
 CREATE INDEX IF NOT EXISTS idx_project_groups_slug ON project_groups(slug);
+CREATE INDEX IF NOT EXISTS idx_project_groups_owner ON project_groups(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_services_project_group ON projects(project_group_id);
 CREATE INDEX IF NOT EXISTS idx_services_slug ON projects(slug);
 CREATE INDEX IF NOT EXISTS idx_database_backups_service_created ON database_backups(project_id, created_at DESC);
@@ -295,6 +301,20 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_active ON api_keys(revoked_at, expires_a
 CREATE INDEX IF NOT EXISTS idx_api_key_project_scopes_key ON api_key_project_scopes(api_key_id);
 CREATE INDEX IF NOT EXISTS idx_api_key_project_scopes_project ON api_key_project_scopes(project_id);
 `);
+
+function defaultProjectOwnerId() {
+  const owner = sqlite.prepare("SELECT id FROM users WHERE role = 'owner' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+  if (owner?.id) return owner.id;
+  const firstUser = sqlite.prepare("SELECT id FROM users ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+  return firstUser?.id ?? null;
+}
+
+const legacyProjectOwnerId = defaultProjectOwnerId();
+if (legacyProjectOwnerId) {
+  sqlite
+    .prepare("UPDATE project_groups SET owner_user_id = ? WHERE owner_user_id IS NULL OR owner_user_id = ''")
+    .run(legacyProjectOwnerId);
+}
 
 const projectGroupSlugRows = sqlite.prepare("SELECT slug FROM project_groups").all() as Array<{ slug: string }>;
 const projectGroupSlugs = new Set(projectGroupSlugRows.map((row) => row.slug));
@@ -320,8 +340,8 @@ for (const service of serviceRows) {
     const groupId = nanoid(10);
     const groupSlug = createUniqueSlug(service.name, projectGroupSlugs);
     sqlite
-      .prepare("INSERT INTO project_groups (id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(groupId, service.name, groupSlug, null, service.created_at, service.updated_at);
+      .prepare("INSERT INTO project_groups (id, owner_user_id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(groupId, legacyProjectOwnerId, service.name, groupSlug, null, service.created_at, service.updated_at);
     projectGroupId = groupId;
   }
 
