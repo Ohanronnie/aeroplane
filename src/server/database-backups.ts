@@ -13,8 +13,9 @@ import { containerNameForService, getServiceById } from "./deploy.js";
 import { db, nowIso, sqlite } from "./db.js";
 import { restoreDatabaseDump } from "./database-restore.js";
 import { deleteR2Object, downloadR2ObjectToFile, uploadFileToR2 } from "./r2-storage.js";
-import { databaseBackups, databaseBackupSettings, envVars, services, type DatabaseBackup, type DatabaseBackupSettings } from "./schema.js";
-import { backupSchedulesEnabled, getSystemSettings, normalizeDatabaseBackupScheduleDefaults, type SystemSettings } from "./system-settings.js";
+import { databaseBackups, databaseBackupSettings, envVars, projectGroups, services, type DatabaseBackup, type DatabaseBackupSettings, type Service } from "./schema.js";
+import { backupSchedulesEnabled, getSystemSettings, normalizeDatabaseBackupScheduleDefaults, type R2Settings, type SystemSettings } from "./system-settings.js";
+import { getUserR2Settings } from "./user-settings.js";
 
 export type BackupStorageTarget = "disk" | "r2" | "disk+r2";
 export type BackupTrigger = "manual" | "daily" | "weekly" | "monthly";
@@ -111,6 +112,24 @@ async function copyBackupFromContainer(ctx: DatabaseContext, remotePath: string,
 
 function fileSha256(localPath: string) {
   return createHash("sha256").update(readFileSync(localPath)).digest("hex");
+}
+
+function serviceOwnerUserId(service: Service) {
+  const project = db
+    .select({ ownerUserId: projectGroups.ownerUserId })
+    .from(projectGroups)
+    .where(eq(projectGroups.id, service.projectId))
+    .get();
+  return project?.ownerUserId ?? null;
+}
+
+function r2SettingsForService(service: Service): R2Settings | null {
+  const ownerUserId = serviceOwnerUserId(service);
+  return ownerUserId ? getUserR2Settings(ownerUserId) : getSystemSettings().r2 ?? null;
+}
+
+function backupSettingsForService(service: Service, settings?: SystemSettings): SystemSettings {
+  return settings ?? { ...getSystemSettings(), r2: r2SettingsForService(service) };
 }
 
 function defaultStorageTarget(settings = getSystemSettings()): BackupStorageTarget {
@@ -305,17 +324,19 @@ export function getDatabaseBackupSettings(serviceId: string) {
   return publicBackupSettings(settings);
 }
 
-export function initializeDatabaseBackupSettings(serviceId: string, settings: SystemSettings = getSystemSettings()) {
+export function initializeDatabaseBackupSettings(serviceId: string, settings?: SystemSettings) {
+  const ctx = databaseContext(serviceId);
   const existing = db.select().from(databaseBackupSettings).where(eq(databaseBackupSettings.serviceId, serviceId)).get();
   if (existing) return publicBackupSettings(existing);
 
+  const resolvedSettings = backupSettingsForService(ctx.service, settings);
   const timestamp = nowIso();
-  const scheduleEnabled = defaultScheduleSettings(settings);
+  const scheduleEnabled = defaultScheduleSettings(resolvedSettings);
   db.insert(databaseBackupSettings)
     .values({
       serviceId,
-      storage: defaultStorageTarget(settings),
-      automaticEnabled: defaultAutomaticBackupsEnabled(settings),
+      storage: defaultStorageTarget(resolvedSettings),
+      automaticEnabled: defaultAutomaticBackupsEnabled(resolvedSettings),
       dailyEnabled: scheduleEnabled.daily,
       weeklyEnabled: scheduleEnabled.weekly,
       monthlyEnabled: scheduleEnabled.monthly,
@@ -332,7 +353,7 @@ export function updateDatabaseBackupSettings(
   serviceId: string,
   input: { storage?: BackupStorageTarget; automaticEnabled?: boolean; scheduleEnabled?: Partial<Record<ScheduledBackupTrigger, boolean>> }
 ) {
-  databaseContext(serviceId);
+  const ctx = databaseContext(serviceId);
   const current = getDatabaseBackupSettings(serviceId);
   const storage = input.storage ? normalizeStorageTarget(input.storage) : current.storage;
   const scheduleEnabled = input.scheduleEnabled
@@ -341,8 +362,8 @@ export function updateDatabaseBackupSettings(
       ? current.scheduleEnabled
       : scheduleSettingsFromAutomatic(input.automaticEnabled);
   const automaticEnabled = backupScheduleSettingsEnabled(scheduleEnabled);
-  if ((storage === "r2" || storage === "disk+r2") && !getSystemSettings().r2) {
-    throw new Error("Connect R2 in System Settings before selecting R2 backups.");
+  if ((storage === "r2" || storage === "disk+r2") && !r2SettingsForService(ctx.service)) {
+    throw new Error("Connect R2 in Storage settings before selecting R2 backups.");
   }
 
   const timestamp = nowIso();
@@ -387,10 +408,10 @@ export function listDatabaseBackups(serviceId: string) {
 
 export async function createDatabaseBackup(serviceId: string, storage?: BackupStorageTarget, trigger: BackupTrigger = "manual") {
   const ctx = databaseContext(serviceId);
-  const settings = getSystemSettings();
+  const r2 = r2SettingsForService(ctx.service);
   const target = storage ?? getDatabaseBackupSettings(serviceId).storage;
-  if ((target === "r2" || target === "disk+r2") && !settings.r2) {
-    throw new Error("Connect R2 in System Settings before uploading backups.");
+  if ((target === "r2" || target === "disk+r2") && !r2) {
+    throw new Error("Connect R2 in Storage settings before uploading backups.");
   }
 
   const backupId = nanoid(10);
@@ -429,7 +450,6 @@ export async function createDatabaseBackup(serviceId: string, storage?: BackupSt
     let localPath: string | null = localBackup.localPath;
 
     if (target === "r2" || target === "disk+r2") {
-      const r2 = settings.r2;
       if (!r2) throw new Error("R2 is not connected");
       r2Key = `database-backups/${ctx.service.projectId}/${ctx.service.slug}/${basename(localBackup.localPath)}`;
       r2UploadStarted = true;
@@ -501,7 +521,7 @@ export async function createDatabaseBackup(serviceId: string, storage?: BackupSt
 }
 
 export function getDatabaseBackupFile(serviceId: string, backupId: string) {
-  databaseContext(serviceId);
+  const ctx = databaseContext(serviceId);
   const backup = db
     .select()
     .from(databaseBackups)
@@ -515,7 +535,7 @@ export function getDatabaseBackupFile(serviceId: string, backupId: string) {
     return { backup: publicBackup(backup), localPath: backup.localPath, cleanup: null as null | (() => void), download: null as null | Promise<void> };
   }
 
-  const r2 = getSystemSettings().r2;
+  const r2 = r2SettingsForService(ctx.service);
   if (!backup.r2Key || !r2) {
     throw new Error("Backup file not found");
   }
@@ -549,7 +569,7 @@ export async function restoreDatabaseBackup(serviceId: string, backupId: string)
 }
 
 export async function deleteDatabaseBackup(serviceId: string, backupId: string) {
-  databaseContext(serviceId);
+  const ctx = databaseContext(serviceId);
   const backup = db
     .select()
     .from(databaseBackups)
@@ -563,7 +583,7 @@ export async function deleteDatabaseBackup(serviceId: string, backupId: string) 
     rmSync(backup.localPath, { force: true });
   }
 
-  const r2 = getSystemSettings().r2;
+  const r2 = r2SettingsForService(ctx.service);
   if (backup.r2Key && r2) {
     await deleteR2Object(r2, backup.r2Key).catch(() => undefined);
   }
