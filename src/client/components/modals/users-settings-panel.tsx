@@ -7,10 +7,11 @@ import { UserCreateForm } from "./user-create-form";
 import { UserList } from "./user-list";
 
 function sortUsers(users: ManagedUser[]) {
-  return [...users].sort((a, b) => {
+  const list = Array.isArray(users) ? users : [];
+  return [...list].sort((a, b) => {
     if (a.role === "owner" && b.role !== "owner") return -1;
     if (b.role === "owner" && a.role !== "owner") return 1;
-    return a.createdAt.localeCompare(b.createdAt);
+    return String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""));
   });
 }
 
