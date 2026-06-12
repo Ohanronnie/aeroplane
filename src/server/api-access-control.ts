@@ -32,8 +32,7 @@ export function requireOwnerSessionAccess(c: Context) {
   const denied = requireSessionAccess(c);
   if (denied) return denied;
 
-  const auth = getAuthContext(c);
-  if (auth?.type !== "session" || auth.user.role !== "owner") {
+  if (!isOwnerSession(c)) {
     return forbidden(c, "Owner access is required");
   }
   return null;
@@ -102,6 +101,11 @@ export function requireServiceAccess(c: Context, service: Service) {
 export function sessionUserId(c: Context) {
   const auth = getAuthContext(c);
   return auth?.type === "session" ? auth.user.id : null;
+}
+
+export function isOwnerSession(c: Context) {
+  const auth = getAuthContext(c);
+  return auth?.type === "session" && auth.user.role === "owner";
 }
 
 export function actorUserId(c: Context) {
