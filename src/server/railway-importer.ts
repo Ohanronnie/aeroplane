@@ -453,7 +453,7 @@ export interface ImportConfig {
   selectedServiceIds?: string[];
 }
 
-export async function importRailwayProject(token: string, railwayProjectId: string, config: ImportConfig) {
+export async function importRailwayProject(token: string, railwayProjectId: string, config: ImportConfig, options: { ownerUserId: string }) {
   const serviceInstanceFields = await getServiceInstanceFieldSet(token);
   const serviceInstanceCommandSelection = optionalServiceInstanceSelection(serviceInstanceFields);
   const projectQuery = `
@@ -566,6 +566,7 @@ ${serviceInstanceCommandSelection}
   // Create Project Group
   db.insert(projectGroups).values({
     id: projectGroupId,
+    ownerUserId: options.ownerUserId,
     name: rProject.name,
     slug: projectSlug,
     description: rProject.description ?? null,
