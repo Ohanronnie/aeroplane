@@ -11,8 +11,8 @@ import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { aiProviderName, defaultAiModel, isAiProviderModel, type AiProviderId } from "../shared/ai-providers.js";
 import { db } from "./db.js";
-import { deploymentLogs, deployments, services, type Deployment, type DeploymentLog, type Service } from "./schema.js";
-import { getSystemSettings } from "./system-settings.js";
+import { deploymentLogs, deployments, projectGroups, services, type Deployment, type DeploymentLog, type Service } from "./schema.js";
+import { getUserAiSettings } from "./user-settings.js";
 
 const maxLogLines = 220;
 const maxLogChars = 30000;
@@ -123,13 +123,14 @@ export async function explainDeploymentFailure(
     throw new DeploymentFailureExplanationError("Service not found for this deployment.", 404);
   }
 
-  const settings = getSystemSettings();
-  const providerId = options.providerId || settings.ai?.defaultProvider || "";
+  const project = db.select().from(projectGroups).where(eq(projectGroups.id, service.projectId)).get();
+  const aiSettings = project?.ownerUserId ? getUserAiSettings(project.ownerUserId) : null;
+  const providerId = options.providerId || aiSettings?.defaultProvider || "";
   if (!providerId) {
     throw new DeploymentFailureExplanationError("Choose a default AI provider in Settings before explaining deployment failures.", 409);
   }
 
-  const providerSettings = settings.ai?.providers[providerId];
+  const providerSettings = aiSettings?.providers[providerId];
   if (!providerSettings?.apiKey) {
     throw new DeploymentFailureExplanationError(`${aiProviderName(providerId)} API key is missing.`, 409);
   }
@@ -139,7 +140,7 @@ export async function explainDeploymentFailure(
     throw new DeploymentFailureExplanationError(`${requestedModelId} is not a supported ${aiProviderName(providerId)} model.`);
   }
 
-  const defaultProviderModel = providerId === settings.ai?.defaultProvider ? settings.ai?.defaultModel || "" : "";
+  const defaultProviderModel = providerId === aiSettings?.defaultProvider ? aiSettings?.defaultModel || "" : "";
   const modelId = requestedModelId || defaultProviderModel || providerSettings.selectedModel || defaultAiModel(providerId);
   const logs = db.select().from(deploymentLogs).where(eq(deploymentLogs.deploymentId, deploymentId)).orderBy(asc(deploymentLogs.id)).all();
   const providerOptions = providerId === "xai" ? { xai: { store: false } } : undefined;
