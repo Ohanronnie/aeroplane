@@ -245,7 +245,7 @@ function decryptDnsSettings(dns: SystemSettings["dns"]): SystemSettings["dns"] {
   return Object.keys(next).length > 0 ? next : null;
 }
 
-export function normalizeAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+export function normalizeAiSettings(ai: SystemSettings["ai"]): AiSettings | null {
   if (!ai) return null;
 
   const providers: AiSettings["providers"] = {};
@@ -270,7 +270,7 @@ export function normalizeAiSettings(ai: SystemSettings["ai"]): SystemSettings["a
   return Object.keys(providers).length > 0 ? { defaultProvider, defaultModel, providers } : null;
 }
 
-export function decryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+export function decryptAiSettings(ai: SystemSettings["ai"]): AiSettings | null {
   const normalized = normalizeAiSettings(ai);
   if (!normalized) return null;
 
@@ -316,7 +316,7 @@ function encryptDnsSettings(dns: SystemSettings["dns"]): SystemSettings["dns"] {
   return Object.keys(next).length > 0 ? next : null;
 }
 
-export function encryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+export function encryptAiSettings(ai: SystemSettings["ai"]): AiSettings | null {
   const normalized = normalizeAiSettings(ai);
   if (!normalized) return null;
 
