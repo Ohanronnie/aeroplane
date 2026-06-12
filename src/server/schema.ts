@@ -2,6 +2,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectGroups = sqliteTable("project_groups", {
   id: text("id").primaryKey(),
+  ownerUserId: text("owner_user_id"),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   description: text("description"),
