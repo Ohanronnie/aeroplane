@@ -172,7 +172,7 @@ export function normalizeDatabaseBackupScheduleDefaults(value: unknown, legacyAu
   };
 }
 
-function decryptR2Settings(r2: SystemSettings["r2"]): SystemSettings["r2"] {
+export function decryptR2Settings(r2: SystemSettings["r2"]): SystemSettings["r2"] {
   if (!r2) return null;
   try {
     return {
@@ -186,6 +186,15 @@ function decryptR2Settings(r2: SystemSettings["r2"]): SystemSettings["r2"] {
       secretAccessKey: ""
     };
   }
+}
+
+export function encryptR2Settings(r2: SystemSettings["r2"]): SystemSettings["r2"] {
+  return r2
+    ? {
+        ...r2,
+        secretAccessKey: encryptSecret(r2.secretAccessKey)
+      }
+    : null;
 }
 
 function decryptSecretField(value: string, label: string) {
@@ -335,12 +344,7 @@ function serializeSystemSettings(settings: SystemSettings): SystemSettings {
     deploymentConcurrency,
     databaseBackupScheduleDefaults,
     databaseBackupsAutomaticEnabled: backupSchedulesEnabled(databaseBackupScheduleDefaults),
-    r2: settings.r2
-      ? {
-          ...settings.r2,
-          secretAccessKey: encryptSecret(settings.r2.secretAccessKey)
-        }
-      : null,
+    r2: encryptR2Settings(settings.r2 ?? null),
     dns: encryptDnsSettings(settings.dns ?? null),
     ai: encryptAiSettings(settings.ai ?? null)
   };
