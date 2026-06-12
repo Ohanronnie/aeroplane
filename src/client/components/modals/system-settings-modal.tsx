@@ -30,7 +30,7 @@ const ownerSettingsTabs: Array<{ id: SystemSettingsTab; label: string; icon: unk
   { id: "updates", label: "Updates", icon: Refresh03Icon }
 ];
 
-const userSettingsTabs = ownerSettingsTabs.filter((tab) => tab.id === "ai" || tab.id === "api-access");
+const userSettingsTabs = ownerSettingsTabs.filter((tab) => tab.id === "ai" || tab.id === "api-access" || tab.id === "storage");
 
 export function SystemSettingsModal({
   activeTab,
@@ -74,7 +74,7 @@ export function SystemSettingsModal({
             <SectionTitle
               icon={Settings01Icon}
               title={owner ? "System Settings" : "Settings"}
-              meta={owner ? "Configure global infrastructure, users, routing, and updates." : "Manage account-level access and AI providers."}
+              meta={owner ? "Configure global infrastructure, users, routing, and updates." : "Manage account-level access, AI providers, and backup storage."}
             />
             <button type="button" className={shellButton("ghost")} onClick={onClose}>
               Close
@@ -139,7 +139,7 @@ export function SystemSettingsModal({
                 {roleLoaded && visibleTab === "ai" ? <AiSettingsPanel /> : null}
                 {roleLoaded && visibleTab === "api-access" ? <ApiAccessSettingsPanel open={open} /> : null}
                 {roleLoaded && visibleTab === "users" ? <UsersSettingsPanel open={open} /> : null}
-                {roleLoaded && visibleTab === "storage" ? <R2StorageSettingsPanel open={open} /> : null}
+                {roleLoaded && visibleTab === "storage" ? <R2StorageSettingsPanel open={open} mode={owner ? "system" : "account"} /> : null}
                 {roleLoaded && visibleTab === "migration" ? <MigrationSettingsPanel /> : null}
                 {roleLoaded && visibleTab === "maintenance" ? <MaintenanceSettingsPanel open={open} /> : null}
                 {roleLoaded && visibleTab === "deployments" ? <DeploymentSettingsPanel open={open} /> : null}
