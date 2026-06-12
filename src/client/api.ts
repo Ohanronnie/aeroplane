@@ -369,6 +369,13 @@ export type ManagedUser = AuthUser & {
   lastLoginAt: null | string;
 };
 
+function managedUsersFromPayload(payload: unknown): ManagedUser[] {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  const users = (payload as { users?: unknown }).users;
+  return Array.isArray(users) ? users as ManagedUser[] : [];
+}
+
 export type AuthStatus = {
   setupComplete: boolean;
   authenticated: boolean;
@@ -842,7 +849,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body)
     }),
-  systemUsers: () => request<{ users: ManagedUser[] }>("/api/system/users"),
+  systemUsers: async () => {
+    const payload = await request<{ users?: unknown } | ManagedUser[]>("/api/system/users");
+    return { users: managedUsersFromPayload(payload) };
+  },
   createSystemUser: (body: { email: string; password: string }) =>
     request<{ user: ManagedUser }>("/api/system/users", {
       method: "POST",
