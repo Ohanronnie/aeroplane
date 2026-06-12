@@ -27,6 +27,7 @@ export function ServiceDomainsPanel({
   const [editingHostname, setEditingHostname] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [refreshingDns, setRefreshingDns] = useState(false);
+  const [owner, setOwner] = useState(false);
   const [connectedDnsProviders, setConnectedDnsProviders] = useState<DnsProviderStatus[]>([]);
   const [dnsProviderBusyId, setDnsProviderBusyId] = useState<DnsProviderId | null>(null);
   const [dnsActionNotice, setDnsActionNotice] = useState<{ domainId: string; tone: "success" | "error"; text: string } | null>(null);
@@ -36,6 +37,13 @@ export function ServiceDomainsPanel({
 
     async function loadDnsProviders() {
       try {
+        const status = await api.authStatus();
+        if (!ignore) setOwner(status.user?.role === "owner");
+        if (status.user?.role !== "owner") {
+          if (!ignore) setConnectedDnsProviders([]);
+          return;
+        }
+
         const response = await api.dnsSettings();
         if (!ignore) setConnectedDnsProviders(response.dns.providers.filter((provider) => provider.connected));
       } catch (error) {
@@ -305,11 +313,13 @@ export function ServiceDomainsPanel({
                             ? "Perfect. Caddy reverse-proxy SSL/TLS certificates will automatically renew natively."
                             : "DNS propagation can take a few minutes. Click verify to check again."}
                         </span>
-                        <DomainDnsProviderActions
-                          providers={connectedDnsProviders}
-                          busyProviderId={dnsProviderBusyId}
-                          onApply={(providerId) => void applyDnsRecord(domain, providerId)}
-                        />
+                        {owner ? (
+                          <DomainDnsProviderActions
+                            providers={connectedDnsProviders}
+                            busyProviderId={dnsProviderBusyId}
+                            onApply={(providerId) => void applyDnsRecord(domain, providerId)}
+                          />
+                        ) : null}
                         {dnsActionNotice?.domainId === domain.id ? (
                           <div
                             className={`w-fit border px-2.5 py-1.5 font-mono text-[10px] ${
