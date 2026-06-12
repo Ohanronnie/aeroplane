@@ -1,11 +1,11 @@
 import type { Context, Next } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { nanoid } from "nanoid";
 import { config } from "./config.js";
 import { db, nowIso } from "./db.js";
-import { authSessions, users, type User } from "./schema.js";
+import { authSessions, projectGroups, users, type User } from "./schema.js";
 import { configuredControlPlaneHostname } from "./system-settings.js";
 import { apiKeyTokenFromRequest, authenticateApiKeyToken, type AuthenticatedApiKey } from "./api-keys.js";
 
@@ -146,19 +146,32 @@ export function clearSession(c: Context) {
 }
 
 export function createOwner(input: { name: string; email: string; password: string }) {
+  const user = createUser({ ...input, role: "owner", lastLoginAt: nowIso() });
+  assignUnownedProjectsToUser(user.id);
+  return user;
+}
+
+export function createUser(input: { name: string; email: string; password: string; role?: "owner" | "user"; lastLoginAt?: string | null }) {
   const timestamp = nowIso();
   const user: User = {
     id: nanoid(10),
     name: input.name,
     email: input.email.toLowerCase(),
     passwordHash: passwordHash(input.password),
-    role: "owner",
+    role: input.role ?? "user",
     createdAt: timestamp,
     updatedAt: timestamp,
-    lastLoginAt: timestamp
+    lastLoginAt: input.lastLoginAt ?? null
   };
   db.insert(users).values(user).run();
   return user;
+}
+
+function assignUnownedProjectsToUser(userId: string) {
+  db.update(projectGroups)
+    .set({ ownerUserId: userId, updatedAt: nowIso() })
+    .where(isNull(projectGroups.ownerUserId))
+    .run();
 }
 
 export function authenticateUser(email: string, password: string) {
@@ -222,7 +235,6 @@ function isPublicApiPath(pathname: string) {
     pathname === "/api/auth/setup" ||
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
-    pathname === "/api/github/status" ||
     pathname === "/api/github/app/webhook"
   );
 }
