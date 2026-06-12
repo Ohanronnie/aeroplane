@@ -191,6 +191,16 @@ function restoreUsers(rows: Array<Record<string, unknown>>) {
   transaction();
 }
 
+function backfillImportedProjectOwners() {
+  const owner = sqlite.prepare("SELECT id FROM users WHERE role = 'owner' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+  const firstUser = sqlite.prepare("SELECT id FROM users ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+  const fallbackUser = owner ?? firstUser;
+  if (!fallbackUser?.id) return;
+  sqlite
+    .prepare("UPDATE project_groups SET owner_user_id = ? WHERE owner_user_id IS NULL OR owner_user_id = ''")
+    .run(fallbackUser.id);
+}
+
 async function fileChecksum(localPath: string) {
   const hash = createHash("sha256");
   await new Promise<void>((resolvePromise, reject) => {
@@ -398,6 +408,7 @@ export async function importMigrationBundle(bundlePath: string, passphrase: stri
     await restoreDatabaseDumps(payloadDir, manifest.databaseDumps);
     await writeAndReloadCaddy();
     restoreUsers(logicalData.users);
+    backfillImportedProjectOwners();
 
     const importedServices = db.select().from(services).all();
     return {
