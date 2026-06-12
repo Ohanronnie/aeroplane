@@ -19,11 +19,17 @@ type BackupListProps = {
   busy: string;
   deleteId: string;
   restoreId: string;
+  showRemoteStorageDetails: boolean;
   onDeletePrompt: (backupId: string) => void;
   onRestorePrompt: (backupId: string) => void;
   onDelete: (backupId: string) => void;
   onRestore: (backupId: string) => void;
 };
+
+function visibleStorageLabel(backup: DatabaseBackupRecord, showRemoteStorageDetails: boolean) {
+  if (showRemoteStorageDetails) return storageLabel(backup.storage, Boolean(backup.r2Key));
+  return backup.storage === "disk" ? storageLabel(backup.storage) : "Disk";
+}
 
 export function BackupList({
   serviceId,
@@ -33,6 +39,7 @@ export function BackupList({
   busy,
   deleteId,
   restoreId,
+  showRemoteStorageDetails,
   onDeletePrompt,
   onRestorePrompt,
   onDelete,
@@ -70,7 +77,7 @@ export function BackupList({
                       {triggerLabel(backup.trigger)}
                     </span>
                     <span className="border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-                      {storageLabel(backup.storage, Boolean(backup.r2Key))}
+                      {visibleStorageLabel(backup, showRemoteStorageDetails)}
                     </span>
                     <span className="border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
                       {formatBytes(backup.sizeBytes)}
@@ -81,7 +88,7 @@ export function BackupList({
                     <span>{backup.engine}</span>
                     <span>{backup.format}</span>
                     <span>{formatDate(backup.createdAt)}</span>
-                    {backup.r2Key ? <span className="normal-case tracking-normal text-[#7fe3dd]">{backup.r2Key}</span> : null}
+                    {showRemoteStorageDetails && backup.r2Key ? <span className="normal-case tracking-normal text-[#7fe3dd]">{backup.r2Key}</span> : null}
                   </div>
                   {backup.error ? <div className="mt-3 text-xs leading-relaxed text-rose-300">{backup.error}</div> : null}
                 </div>
