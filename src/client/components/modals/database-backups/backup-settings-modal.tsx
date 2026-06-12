@@ -14,6 +14,7 @@ type BackupSettingsModalProps = {
   open: boolean;
   activeSettings: DatabaseBackupSettings;
   r2Connected: boolean;
+  showRemoteStorageOptions: boolean;
   draftStorage: BackupStorageTarget;
   draftScheduleEnabled: BackupScheduleEnabled;
   saving: boolean;
@@ -27,6 +28,7 @@ export function BackupSettingsModal({
   open,
   activeSettings,
   r2Connected,
+  showRemoteStorageOptions,
   draftStorage,
   draftScheduleEnabled,
   saving,
@@ -50,8 +52,12 @@ export function BackupSettingsModal({
           <div className="grid gap-3 md:grid-cols-3">
             {([
               { value: "disk" as const, label: "Disk", icon: HardDriveIcon, disabled: false },
-              { value: "r2" as const, label: "R2", icon: CloudUploadIcon, disabled: !r2Connected },
-              { value: "disk+r2" as const, label: "Both", icon: CloudUploadIcon, disabled: !r2Connected }
+              ...(showRemoteStorageOptions
+                ? [
+                    { value: "r2" as const, label: "R2", icon: CloudUploadIcon, disabled: !r2Connected },
+                    { value: "disk+r2" as const, label: "Both", icon: CloudUploadIcon, disabled: !r2Connected }
+                  ]
+                : [])
             ]).map((option) => (
               <button
                 key={option.value}
@@ -71,7 +77,7 @@ export function BackupSettingsModal({
               </button>
             ))}
           </div>
-          {!r2Connected ? (
+          {showRemoteStorageOptions && !r2Connected ? (
             <p className="mt-3 text-xs leading-5 text-zinc-500">
               R2 is not connected, so disk is the default destination.
             </p>
