@@ -236,7 +236,7 @@ function decryptDnsSettings(dns: SystemSettings["dns"]): SystemSettings["dns"] {
   return Object.keys(next).length > 0 ? next : null;
 }
 
-function normalizeAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+export function normalizeAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
   if (!ai) return null;
 
   const providers: AiSettings["providers"] = {};
@@ -261,7 +261,7 @@ function normalizeAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
   return Object.keys(providers).length > 0 ? { defaultProvider, defaultModel, providers } : null;
 }
 
-function decryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+export function decryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
   const normalized = normalizeAiSettings(ai);
   if (!normalized) return null;
 
@@ -307,7 +307,7 @@ function encryptDnsSettings(dns: SystemSettings["dns"]): SystemSettings["dns"] {
   return Object.keys(next).length > 0 ? next : null;
 }
 
-function encryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
+export function encryptAiSettings(ai: SystemSettings["ai"]): SystemSettings["ai"] {
   const normalized = normalizeAiSettings(ai);
   if (!normalized) return null;
 
@@ -492,8 +492,8 @@ export function publicDnsSettings(settings = getSystemSettings()): PublicDnsSett
   };
 }
 
-export function publicAiSettings(settings = getSystemSettings()): PublicAiSettings {
-  const ai = normalizeAiSettings(settings.ai ?? null);
+export function publicAiSettingsForAi(aiSettings: SystemSettings["ai"]): PublicAiSettings {
+  const ai = normalizeAiSettings(aiSettings ?? null);
   const defaultProvider = ai?.defaultProvider && ai.providers[ai.defaultProvider] ? ai.defaultProvider : null;
 
   return {
@@ -514,4 +514,8 @@ export function publicAiSettings(settings = getSystemSettings()): PublicAiSettin
       };
     })
   };
+}
+
+export function publicAiSettings(settings = getSystemSettings()): PublicAiSettings {
+  return publicAiSettingsForAi(settings.ai ?? null);
 }
