@@ -8,9 +8,14 @@ function jsonError(message: string, status = 400) {
 
 export function registerApiKeyRoutes(app: Hono) {
   app.get("/api/system/api-keys", (c) => {
+    const userId = sessionUserId(c);
+    if (!userId) {
+      return jsonError("A browser session is required", 403);
+    }
+
     return c.json({
-      apiKeys: listApiKeys(),
-      projects: listApiKeyProjectOptions()
+      apiKeys: listApiKeys(userId),
+      projects: listApiKeyProjectOptions(userId)
     });
   });
 
@@ -33,7 +38,12 @@ export function registerApiKeyRoutes(app: Hono) {
   });
 
   app.delete("/api/system/api-keys/:apiKeyId", (c) => {
-    const revoked = revokeApiKey(c.req.param("apiKeyId"));
+    const userId = sessionUserId(c);
+    if (!userId) {
+      return jsonError("A browser session is required", 403);
+    }
+
+    const revoked = revokeApiKey(c.req.param("apiKeyId"), userId);
     if (!revoked) {
       return jsonError("API key not found", 404);
     }
