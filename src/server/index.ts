@@ -67,7 +67,6 @@ import {
   getSystemSettings,
   normalizeDatabaseBackupScheduleDefaults,
   normalizeDeploymentConcurrency,
-  publicAiSettings,
   publicDnsSettings,
   publicR2Settings,
   saveSystemSettings
@@ -89,13 +88,19 @@ import {
 } from "./auth.js";
 import { registerApiKeyRoutes } from "./api-key-routes.js";
 import {
+  actorUserId,
   canAccessProject,
+  isOwnerSession,
   requireAllProjectsScope,
   requireApiMethodAccessMiddleware,
+  requireOwnerSessionAccess,
+  requireOwnerSessionAccessMiddleware,
   requireProjectAccess,
   requireServiceAccess,
   requireSessionAccessMiddleware
 } from "./api-access-control.js";
+import { registerSystemUserRoutes } from "./system-user-routes.js";
+import { getUserAiSettings, publicUserAiSettings, saveUserAiSettings } from "./user-settings.js";
 import { managedEnvPath, writeManagedEnv, writeManagedEnvPatch } from "./env-file.js";
 import { generateSecretKey, hasSecretKey } from "./secret-crypto.js";
 import {
@@ -549,8 +554,13 @@ function readContainerLogs(containerName: string, tail = 200) {
   });
 }
 
-function getProjectBySlug(projectSlug: string) {
-  return db.select().from(projectGroups).where(eq(projectGroups.slug, projectSlug)).get();
+function getProjectBySlug(c: Context, projectSlug: string) {
+  return db
+    .select()
+    .from(projectGroups)
+    .where(eq(projectGroups.slug, projectSlug))
+    .all()
+    .find((project) => canAccessProject(c, project.id));
 }
 
 function getProjectById(projectId: string) {
@@ -606,8 +616,15 @@ function getServicesForProject(projectId: string) {
   return db.select().from(services).where(eq(services.projectId, projectId)).orderBy(asc(services.name)).all();
 }
 
-function getProjectSlugSet() {
-  return new Set(db.select({ slug: projectGroups.slug }).from(projectGroups).all().map((row) => row.slug));
+function getProjectSlugSet(ownerUserId: string) {
+  return new Set(
+    db
+      .select({ slug: projectGroups.slug })
+      .from(projectGroups)
+      .where(eq(projectGroups.ownerUserId, ownerUserId))
+      .all()
+      .map((row) => row.slug)
+  );
 }
 
 function getServiceSlugSet(projectId: string) {
@@ -981,14 +998,15 @@ function syncAllExistingDatabaseUrls() {
 function publicAuthStatus(c: Parameters<typeof getCurrentUser>[0]) {
   const setupComplete = hasAuthUsers();
   const user = setupComplete ? getCurrentUser(c) : null;
+  const includeRuntimeDetails = !setupComplete || user?.role === "owner";
   return {
     setupComplete,
     authenticated: Boolean(user),
     user,
-    secretKeyConfigured: hasSecretKey(),
-    envPath: managedEnvPath(),
-    publicIp: cachedPublicIp,
-    runtimeConfig: currentRuntimeConfig()
+    secretKeyConfigured: includeRuntimeDetails ? hasSecretKey() : false,
+    envPath: includeRuntimeDetails ? managedEnvPath() : "",
+    publicIp: includeRuntimeDetails ? cachedPublicIp : undefined,
+    runtimeConfig: includeRuntimeDetails ? currentRuntimeConfig() : undefined
   };
 }
 
@@ -1072,6 +1090,21 @@ async function publicGithubSettings() {
       envPath: managedEnvPath()
     }
   };
+}
+
+function backupStorageUsesOwnerR2(storage: string | null | undefined) {
+  return storage === "r2" || storage === "disk+r2";
+}
+
+function diskOnlyBackupSettings(settings: ReturnType<typeof getDatabaseBackupSettings>) {
+  return backupStorageUsesOwnerR2(settings.storage)
+    ? { ...settings, storage: "disk" as const, defaultStorage: "disk" as const }
+    : settings;
+}
+
+function publicBackupR2SettingsForRequest(c: Context) {
+  const settings = getSystemSettings();
+  return publicR2Settings(isOwnerSession(c) ? settings : { ...settings, r2: null });
 }
 
 function updateGithubRuntimeEnv(values: ReturnType<typeof currentGithubEnv>) {
@@ -1307,9 +1340,23 @@ app.get("/api/assets/framework-icons/:file", async (c) => {
 app.use("/api/*", requireAuth);
 app.use("/api/system", requireSessionAccessMiddleware);
 app.use("/api/system/*", requireSessionAccessMiddleware);
-app.use("/api/github/repos", requireSessionAccessMiddleware);
-app.use("/api/github/branches", requireSessionAccessMiddleware);
-app.use("/api/github/directories", requireSessionAccessMiddleware);
+app.use("/api/system/onboarding/*", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/settings", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/r2", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/dns", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/dns/*", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/github", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/updates", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/updates/*", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/maintenance", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/maintenance/*", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/migration/*", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/users", requireOwnerSessionAccessMiddleware);
+app.use("/api/system/users/*", requireOwnerSessionAccessMiddleware);
+app.use("/api/github/status", requireOwnerSessionAccessMiddleware);
+app.use("/api/github/repos", requireOwnerSessionAccessMiddleware);
+app.use("/api/github/branches", requireOwnerSessionAccessMiddleware);
+app.use("/api/github/directories", requireOwnerSessionAccessMiddleware);
 app.use("/api/integrations/*", requireSessionAccessMiddleware);
 app.use("/api/projects", requireApiMethodAccessMiddleware);
 app.use("/api/projects/*", requireApiMethodAccessMiddleware);
@@ -1332,7 +1379,11 @@ app.post("/api/system/onboarding/restart", async (c) => {
   }
 });
 
-app.get("/api/system", async (c) => c.json(await getSystemChecks()));
+app.get("/api/system", async (c) => {
+  const denied = requireOwnerSessionAccess(c);
+  if (denied) return denied;
+  return c.json(await getSystemChecks());
+});
 
 app.get("/api/system/maintenance", async (c) => c.json(await getSystemMaintenanceInfo()));
 
@@ -1463,6 +1514,7 @@ app.post("/api/system/settings", async (c) => {
 });
 
 registerApiKeyRoutes(app);
+registerSystemUserRoutes(app);
 
 app.get("/api/system/r2", (c) => c.json({ r2: publicR2Settings() }));
 
@@ -1631,16 +1683,23 @@ app.delete("/api/system/dns/:provider", (c) => {
   return c.json({ ok: true, dns: publicDnsSettings(nextSettings) });
 });
 
-app.get("/api/system/ai", (c) => c.json({ ai: publicAiSettings() }));
+app.get("/api/system/ai", (c) => {
+  const userId = actorUserId(c);
+  if (!userId) return jsonError("Authenticated user not found", 401);
+  return c.json({ ai: publicUserAiSettings(userId) });
+});
 
 app.post("/api/system/ai", async (c) => {
+  const userId = actorUserId(c);
+  if (!userId) return jsonError("Authenticated user not found", 401);
+
   const body = aiSettingsSchema.safeParse(await c.req.json());
   if (!body.success) {
     return jsonError(body.error.issues[0]?.message ?? "Invalid AI settings");
   }
 
-  const settings = getSystemSettings();
-  const providers = { ...(settings.ai?.providers ?? {}) };
+  const ai = getUserAiSettings(userId);
+  const providers = { ...(ai?.providers ?? {}) };
   const defaultProvider = body.data.defaultProvider;
   const providerSettings = providers[defaultProvider];
   if (!providerSettings?.apiKey) {
@@ -1653,15 +1712,15 @@ app.post("/api/system/ai", async (c) => {
   }
 
   providers[defaultProvider] = { ...providerSettings, selectedModel: defaultModel };
-  const nextSettings = {
-    ...settings,
-    ai: { defaultProvider, defaultModel, providers }
-  };
-  saveSystemSettings(nextSettings);
-  return c.json({ ok: true, ai: publicAiSettings(nextSettings) });
+  const nextAi = { defaultProvider, defaultModel, providers };
+  saveUserAiSettings(userId, nextAi);
+  return c.json({ ok: true, ai: publicUserAiSettings(userId) });
 });
 
 app.post("/api/system/ai/providers/:provider", async (c) => {
+  const userId = actorUserId(c);
+  if (!userId) return jsonError("Authenticated user not found", 401);
+
   if (!hasSecretKey()) {
     return jsonError("AEROPLANE_SECRET_KEY is required before saving AI provider credentials", 409);
   }
@@ -1676,9 +1735,9 @@ app.post("/api/system/ai/providers/:provider", async (c) => {
     return jsonError(body.error.issues[0]?.message ?? "Invalid AI provider credentials");
   }
 
-  const settings = getSystemSettings();
+  const ai = getUserAiSettings(userId);
   const providerId = provider.data;
-  const previous = settings.ai?.providers?.[providerId];
+  const previous = ai?.providers?.[providerId];
   const submittedApiKey = body.data.apiKey.trim();
   if (isExternalMaskedSecret(submittedApiKey)) {
     return jsonError(`Paste the full ${aiProviderName(providerId)} API key, not a masked key.`);
@@ -1699,7 +1758,7 @@ app.post("/api/system/ai/providers/:provider", async (c) => {
 
   const timestamp = nowIso();
   const providers = {
-    ...(settings.ai?.providers ?? {}),
+    ...(ai?.providers ?? {}),
     [providerId]: {
       provider: providerId,
       apiKey,
@@ -1708,46 +1767,43 @@ app.post("/api/system/ai/providers/:provider", async (c) => {
       updatedAt: timestamp
     }
   };
-  const currentDefaultProvider: AiProviderId | "" = settings.ai?.defaultProvider && providers[settings.ai.defaultProvider] ? settings.ai.defaultProvider : "";
+  const currentDefaultProvider: AiProviderId | "" = ai?.defaultProvider && providers[ai.defaultProvider] ? ai.defaultProvider : "";
   const currentDefaultModel =
     currentDefaultProvider === providerId
       ? selectedModel
       : currentDefaultProvider
-        ? settings.ai?.defaultModel || providers[currentDefaultProvider]?.selectedModel || defaultAiModel(currentDefaultProvider)
+        ? ai?.defaultModel || providers[currentDefaultProvider]?.selectedModel || defaultAiModel(currentDefaultProvider)
         : "";
-  const nextSettings = {
-    ...settings,
-    ai: {
-      defaultProvider: currentDefaultProvider,
-      defaultModel: currentDefaultModel,
-      providers
-    }
+  const nextAi = {
+    defaultProvider: currentDefaultProvider,
+    defaultModel: currentDefaultModel,
+    providers
   };
 
-  saveSystemSettings(nextSettings);
-  return c.json({ ok: true, ai: publicAiSettings(nextSettings) });
+  saveUserAiSettings(userId, nextAi);
+  return c.json({ ok: true, ai: publicUserAiSettings(userId) });
 });
 
 app.delete("/api/system/ai/providers/:provider", (c) => {
+  const userId = actorUserId(c);
+  if (!userId) return jsonError("Authenticated user not found", 401);
+
   const provider = aiProviderIdSchema.safeParse(c.req.param("provider"));
   if (!provider.success) {
     return jsonError("Unsupported AI provider", 404);
   }
 
-  const settings = getSystemSettings();
-  const providers = { ...(settings.ai?.providers ?? {}) };
+  const ai = getUserAiSettings(userId);
+  const providers = { ...(ai?.providers ?? {}) };
   delete providers[provider.data];
 
-  const currentDefaultProvider = settings.ai?.defaultProvider;
+  const currentDefaultProvider = ai?.defaultProvider;
   const defaultProvider: AiProviderId | "" = currentDefaultProvider && currentDefaultProvider !== provider.data && providers[currentDefaultProvider] ? currentDefaultProvider : "";
-  const defaultModel = defaultProvider ? settings.ai?.defaultModel || providers[defaultProvider]?.selectedModel || defaultAiModel(defaultProvider) : "";
-  const nextSettings = {
-    ...settings,
-    ai: Object.keys(providers).length > 0 ? { defaultProvider, defaultModel, providers } : null
-  };
+  const defaultModel = defaultProvider ? ai?.defaultModel || providers[defaultProvider]?.selectedModel || defaultAiModel(defaultProvider) : "";
+  const nextAi = Object.keys(providers).length > 0 ? { defaultProvider, defaultModel, providers } : null;
 
-  saveSystemSettings(nextSettings);
-  return c.json({ ok: true, ai: publicAiSettings(nextSettings) });
+  saveUserAiSettings(userId, nextAi);
+  return c.json({ ok: true, ai: publicUserAiSettings(userId) });
 });
 
 app.get("/api/system/github", async (c) => {
@@ -1880,11 +1936,16 @@ app.post("/api/projects", async (c) => {
   }
   const denied = requireAllProjectsScope(c);
   if (denied) return denied;
+  const ownerUserId = actorUserId(c);
+  if (!ownerUserId) {
+    return jsonError("Authenticated user not found", 401);
+  }
 
   const timestamp = nowIso();
-  const projectSlug = createUniqueSlug(body.data.name, getProjectSlugSet());
+  const projectSlug = createUniqueSlug(body.data.name, getProjectSlugSet(ownerUserId));
   const project: ProjectGroup = {
     id: nanoid(10),
+    ownerUserId,
     name: body.data.name,
     slug: projectSlug,
     description: body.data.description ?? null,
@@ -1897,7 +1958,7 @@ app.post("/api/projects", async (c) => {
 });
 
 app.get("/api/projects/:projectSlug", async (c) => {
-  const project = getProjectBySlug(c.req.param("projectSlug"));
+  const project = getProjectBySlug(c, c.req.param("projectSlug"));
   if (!project) {
     return jsonError("Project not found", 404);
   }
@@ -2264,10 +2325,11 @@ app.get("/api/services/:serviceId/database/backups", (c) => {
 
   try {
     const serviceId = c.req.param("serviceId");
+    const settings = getDatabaseBackupSettings(serviceId);
     return c.json({
       backups: listDatabaseBackups(serviceId),
-      settings: getDatabaseBackupSettings(serviceId),
-      r2: publicR2Settings()
+      settings: isOwnerSession(c) ? settings : diskOnlyBackupSettings(settings),
+      r2: publicBackupR2SettingsForRequest(c)
     });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Could not load backups", 400);
@@ -2283,8 +2345,13 @@ app.patch("/api/services/:serviceId/database/backups/settings", async (c) => {
     return jsonError(body.error.issues[0]?.message ?? "Invalid backup settings");
   }
 
+  if (!isOwnerSession(c) && backupStorageUsesOwnerR2(body.data.storage)) {
+    return jsonError("Owner storage credentials cannot be used for this account.", 403);
+  }
+
   try {
-    return c.json({ settings: updateDatabaseBackupSettings(c.req.param("serviceId"), body.data) });
+    const input = isOwnerSession(c) ? body.data : { ...body.data, storage: "disk" as const };
+    return c.json({ settings: updateDatabaseBackupSettings(c.req.param("serviceId"), input) });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Could not update backup settings", 400);
   }
@@ -2299,8 +2366,19 @@ app.post("/api/services/:serviceId/database/backups", async (c) => {
     return jsonError(body.error.issues[0]?.message ?? "Invalid backup request");
   }
 
+  if (!isOwnerSession(c) && backupStorageUsesOwnerR2(body.data.storage)) {
+    return jsonError("Owner storage credentials cannot be used for this account.", 403);
+  }
+
   try {
-    return c.json({ backup: await createDatabaseBackup(c.req.param("serviceId"), body.data.storage) }, 201);
+    const serviceId = c.req.param("serviceId");
+    const requestedStorage = body.data.storage;
+    const storage = isOwnerSession(c)
+      ? requestedStorage
+      : backupStorageUsesOwnerR2(requestedStorage ?? getDatabaseBackupSettings(serviceId).storage)
+        ? "disk"
+        : requestedStorage;
+    return c.json({ backup: await createDatabaseBackup(serviceId, storage) }, 201);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Could not create backup", 400);
   }
@@ -2951,6 +3029,9 @@ app.patch("/api/services/:serviceId/domains/:domainId", async (c) => {
 });
 
 app.post("/api/services/:serviceId/domains/:domainId/dns-records", async (c) => {
+  const ownerDenied = requireOwnerSessionAccess(c);
+  if (ownerDenied) return ownerDenied;
+
   const serviceAccess = getAuthorizedService(c);
   if (serviceAccess.response) return serviceAccess.response;
   const { service } = serviceAccess;
@@ -3091,7 +3172,11 @@ app.post("/api/integrations/railway/import", async (c) => {
     if (!token || !projectId) {
       return jsonError("API Token and Project ID are required");
     }
-    const result = await importRailwayProject(token, projectId, config);
+    const ownerUserId = actorUserId(c);
+    if (!ownerUserId) {
+      return jsonError("Authenticated user not found", 401);
+    }
+    const result = await importRailwayProject(token, projectId, config, { ownerUserId });
     const autoDeploy = config.autoDeploy !== false;
     const importDatabaseData = Boolean(config.importDatabaseData) && autoDeploy && config.importDatabases !== false;
     startRailwayImportAutomation({
