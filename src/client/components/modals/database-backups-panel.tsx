@@ -19,7 +19,6 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
   const [deleteId, setDeleteId] = useState("");
   const [restoreId, setRestoreId] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [owner, setOwner] = useState(false);
   const [draftStorage, setDraftStorage] = useState<BackupStorageTarget>("disk");
   const [draftScheduleEnabled, setDraftScheduleEnabled] = useState<BackupScheduleEnabled>({
     ...disabledBackupScheduleEnabled
@@ -28,7 +27,7 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
   const [success, setSuccess] = useState("");
 
   const r2Connected = r2?.connected ?? false;
-  const r2Available = owner && r2Connected;
+  const r2Available = r2Connected;
   const activeSettings = settings ?? defaultSettings(r2Available);
 
   const loadBackups = useCallback(async () => {
@@ -51,18 +50,6 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
   useEffect(() => {
     void loadBackups();
   }, [loadBackups]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void api.authStatus().then((status) => {
-      if (!cancelled) setOwner(status.user?.role === "owner");
-    }).catch(() => {
-      if (!cancelled) setOwner(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function createBackup() {
     setBusy("backup");
@@ -202,6 +189,7 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
           busy={busy}
           deleteId={deleteId}
           restoreId={restoreId}
+          showRemoteStorageDetails={true}
           onDeletePrompt={setDeleteId}
           onRestorePrompt={setRestoreId}
           onDelete={(backupId) => void deleteBackup(backupId)}
@@ -213,7 +201,7 @@ export function DatabaseBackupsPanel({ serviceId }: { serviceId: string }) {
         open={settingsOpen}
         activeSettings={activeSettings}
         r2Connected={r2Available}
-        showRemoteStorageOptions={owner}
+        showRemoteStorageOptions={true}
         draftStorage={draftStorage}
         draftScheduleEnabled={draftScheduleEnabled}
         saving={savingSettings}
