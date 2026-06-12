@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -53,6 +53,7 @@ export type ApiKeyProjectOption = {
 };
 
 export type AuthenticatedApiKey = PublicApiKey & {
+  createdByUserId: string;
   projectIdSet: Set<string>;
 };
 
@@ -100,7 +101,7 @@ function publicApiKey(apiKey: ApiKey, projectIds = projectIdsForApiKey(apiKey.id
   };
 }
 
-function ensureSelectedProjectsExist(projectIds: string[]) {
+function ensureSelectedProjectsExist(projectIds: string[], ownerUserId: string) {
   const uniqueProjectIds = [...new Set(projectIds)];
   if (uniqueProjectIds.length === 0) return uniqueProjectIds;
 
@@ -108,6 +109,7 @@ function ensureSelectedProjectsExist(projectIds: string[]) {
     db
       .select({ id: projectGroups.id })
       .from(projectGroups)
+      .where(eq(projectGroups.ownerUserId, ownerUserId))
       .all()
       .map((project) => project.id)
   );
@@ -144,30 +146,32 @@ export function authenticateApiKeyToken(token: string): AuthenticatedApiKey | nu
 
   return {
     ...publicApiKey({ ...apiKey, lastUsedAt: timestamp, updatedAt: timestamp }, projectIds),
+    createdByUserId: apiKey.createdByUserId,
     projectIdSet: new Set(projectIds)
   };
 }
 
-export function listApiKeys() {
+export function listApiKeys(createdByUserId: string) {
   return db
     .select()
     .from(apiKeys)
-    .where(isNull(apiKeys.revokedAt))
+    .where(and(eq(apiKeys.createdByUserId, createdByUserId), isNull(apiKeys.revokedAt)))
     .orderBy(asc(apiKeys.name))
     .all()
     .map((apiKey) => publicApiKey(apiKey));
 }
 
-export function listApiKeyProjectOptions(): ApiKeyProjectOption[] {
+export function listApiKeyProjectOptions(ownerUserId: string): ApiKeyProjectOption[] {
   return db
     .select({ id: projectGroups.id, name: projectGroups.name, slug: projectGroups.slug })
     .from(projectGroups)
+    .where(eq(projectGroups.ownerUserId, ownerUserId))
     .orderBy(asc(projectGroups.name))
     .all();
 }
 
 export function createApiKey(input: z.infer<typeof createApiKeySchema>, createdByUserId: string) {
-  const selectedProjectIds = input.projectScope === "selected" ? ensureSelectedProjectsExist(input.projectIds) : [];
+  const selectedProjectIds = input.projectScope === "selected" ? ensureSelectedProjectsExist(input.projectIds, createdByUserId) : [];
   const timestamp = nowIso();
   const { token, tokenPrefix } = generateApiKeyToken();
   const apiKey: ApiKey = {
@@ -203,8 +207,12 @@ export function createApiKey(input: z.infer<typeof createApiKeySchema>, createdB
   };
 }
 
-export function revokeApiKey(apiKeyId: string) {
-  const apiKey = db.select().from(apiKeys).where(eq(apiKeys.id, apiKeyId)).get();
+export function revokeApiKey(apiKeyId: string, createdByUserId: string) {
+  const apiKey = db
+    .select()
+    .from(apiKeys)
+    .where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.createdByUserId, createdByUserId)))
+    .get();
   if (!apiKey || apiKey.revokedAt) return false;
 
   const timestamp = nowIso();
