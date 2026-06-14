@@ -131,6 +131,7 @@ import { listDatabaseDataImports } from "./database-data-imports.js";
 import { listServiceImportSources } from "./service-import-sources.js";
 import { checkPostgresTlsActive, ensurePostgresTlsAssets, getPostgresTlsInfo } from "./postgres-tls.js";
 import { DeploymentFailureExplanationError, explainDeploymentFailure } from "./deployment-failure-ai.js";
+import { FunctionCodeGenerationError, generateFunctionSourceCode } from "./function-code-ai.js";
 import {
   DOCKER_IMAGE_REPO_URL,
   dockerImageForService,
@@ -501,6 +502,13 @@ const functionSourceUpdateSchema = z.object({
   sourceCode: z.string().optional()
 }).refine((value) => value.runtime !== undefined || value.sourceCode !== undefined, {
   message: "Nothing to update"
+});
+const functionCodeGenerationRequestSchema = z.object({
+  prompt: z.string().trim().min(1, "Describe what the function should do.").max(4000, "Keep the prompt under 4000 characters."),
+  runtime: z.enum(functionRuntimes),
+  sourceCode: z.string().optional(),
+  providerId: aiProviderIdSchema.optional(),
+  model: z.string().trim().optional()
 });
 const transferServiceSchema = z.object({
   targetProjectId: z.string().trim().min(1)
@@ -2264,6 +2272,39 @@ app.patch("/api/services/:serviceId/function-source", async (c) => {
     return c.json({ source, service: updated ? await publicService(updated) : null });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Could not update function source");
+  }
+});
+
+app.post("/api/services/:serviceId/function-source/generate", async (c) => {
+  try {
+    const serviceAccess = getAuthorizedService(c);
+    if (serviceAccess.response) return serviceAccess.response;
+    const { service } = serviceAccess;
+    if (!isFunctionService(service)) {
+      return jsonError("Source Code is only available for function services.", 404);
+    }
+
+    const userId = actorUserId(c);
+    if (!userId) return jsonError("Authenticated user not found", 401);
+
+    const body = functionCodeGenerationRequestSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) {
+      return jsonError(body.error.issues[0]?.message ?? "Invalid code generation request");
+    }
+
+    const generation = await generateFunctionSourceCode(userId, service, {
+      prompt: body.data.prompt,
+      runtime: body.data.runtime,
+      sourceCode: body.data.sourceCode,
+      providerId: body.data.providerId,
+      modelId: body.data.model
+    });
+    return c.json({ generation });
+  } catch (error) {
+    if (error instanceof FunctionCodeGenerationError) {
+      return jsonError(error.message, error.status);
+    }
+    return jsonError(error instanceof Error ? error.message : "Could not generate function code", 500);
   }
 });
 
