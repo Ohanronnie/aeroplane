@@ -1,18 +1,11 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createDeepSeek } from "@ai-sdk/deepseek";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createGroq } from "@ai-sdk/groq";
-import { createMistral } from "@ai-sdk/mistral";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createXai } from "@ai-sdk/xai";
-import { generateText, Output, type LanguageModel } from "ai";
+import { generateText, Output } from "ai";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { aiProviderName, defaultAiModel, isAiProviderModel, type AiProviderId } from "../shared/ai-providers.js";
 import { db } from "./db.js";
 import { deploymentLogs, deployments, projectGroups, services, type Deployment, type DeploymentLog, type Service } from "./schema.js";
 import { getUserAiSettings } from "./user-settings.js";
+import { modelForAiProvider, providerOptionsForAiProvider } from "./ai-models.js";
 
 const maxLogLines = 220;
 const maxLogChars = 30000;
@@ -40,22 +33,6 @@ export class DeploymentFailureExplanationError extends Error {
     this.name = "DeploymentFailureExplanationError";
     this.status = status;
   }
-}
-
-function modelForProvider(providerId: AiProviderId, apiKey: string, modelId: string): LanguageModel {
-  if (providerId === "openai") return createOpenAI({ apiKey })(modelId);
-  if (providerId === "anthropic") return createAnthropic({ apiKey })(modelId);
-  if (providerId === "google") return createGoogleGenerativeAI({ apiKey })(modelId);
-  if (providerId === "mistral") return createMistral({ apiKey })(modelId);
-  if (providerId === "groq") return createGroq({ apiKey })(modelId);
-  if (providerId === "deepseek") return createDeepSeek({ apiKey })(modelId);
-  if (providerId === "xai") return createXai({ apiKey }).responses(modelId);
-
-  return createOpenAICompatible({
-    name: "moonshot",
-    apiKey,
-    baseURL: "https://api.moonshot.ai/v1"
-  })(modelId);
 }
 
 function formatDeployment(deployment: Deployment, service: Service) {
@@ -143,14 +120,12 @@ export async function explainDeploymentFailure(
   const defaultProviderModel = providerId === aiSettings?.defaultProvider ? aiSettings?.defaultModel || "" : "";
   const modelId = requestedModelId || defaultProviderModel || providerSettings.selectedModel || defaultAiModel(providerId);
   const logs = db.select().from(deploymentLogs).where(eq(deploymentLogs.deploymentId, deploymentId)).orderBy(asc(deploymentLogs.id)).all();
-  const providerOptions = providerId === "xai" ? { xai: { store: false } } : undefined;
-
   const result = await generateText({
-    model: modelForProvider(providerId, providerSettings.apiKey, modelId),
+    model: modelForAiProvider(providerId, providerSettings.apiKey, modelId),
     temperature: 0.2,
     maxOutputTokens: 900,
     prompt: buildPrompt(deployment, service, logs),
-    providerOptions,
+    providerOptions: providerOptionsForAiProvider(providerId),
     output: Output.object({
       schema: deploymentFailureExplanationSchema,
       name: "deployment_failure_explanation"
