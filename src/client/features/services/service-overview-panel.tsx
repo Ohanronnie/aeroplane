@@ -3,6 +3,7 @@ import {
   CheckmarkCircle02Icon,
   Clock01Icon,
   DatabaseIcon,
+  FunctionIcon,
   GithubIcon,
   PackageIcon,
   Settings01Icon,
@@ -16,6 +17,7 @@ import { formatRelativeTime, formatTime, shortSha } from "../../lib/format";
 import { formatBuildDuration } from "./service-format";
 import type { ServiceTab } from "./service-tabs";
 import { dockerImageForService, isDockerImageService } from "../../../shared/service-source";
+import { functionRuntimeLabels, isFunctionService } from "../../../shared/service-functions";
 
 type ServiceOverviewPanelProps = {
   service: Service;
@@ -39,6 +41,7 @@ type OverviewStatProps = {
 
 function repoLabel(service: Service, isDatabase: boolean, databaseEngine: string) {
   if (isDatabase) return databaseEngine ? `${databaseEngine} database` : "database";
+  if (isFunctionService(service)) return `${functionRuntimeLabels[service.functionRuntime ?? "node"]} function`;
   if (isDockerImageService(service)) return service.dockerImage || dockerImageForService(service) || "Docker image";
   return service.repoFullName ?? service.repoUrl.replace(/^https?:\/\//, "").replace(/^github\.com\//, "");
 }
@@ -113,12 +116,13 @@ function warningItems({
   const warnings: string[] = [];
   const latest = deployments[0];
   const isWorker = service.runtimeMode === "worker";
+  const isFunction = isFunctionService(service);
 
   if (!latest) warnings.push("No deployment has run yet.");
   if (latest?.status === "failed") warnings.push("Latest deployment failed.");
   if (!service.reachable && !deploymentIsPending(service.status)) warnings.push("Runtime is not reachable.");
   if (!isDatabase && !isWorker && domains.some((domain) => domain.status !== "active")) warnings.push("One or more domains still need DNS verification.");
-  if (!isDatabase && !isDockerImage && !service.repoFullName && !service.repoUrl) warnings.push("No source repository is connected.");
+  if (!isDatabase && !isDockerImage && !isFunction && !service.repoFullName && !service.repoUrl) warnings.push("No source repository is connected.");
 
   return warnings;
 }
@@ -173,10 +177,11 @@ export function ServiceOverviewPanel({
     ? formatBuildDuration(latestDeployment.startedAt ?? latestDeployment.createdAt, latestDeployment.finishedAt, nowMs)
     : null;
   const isDockerImage = isDockerImageService(service);
+  const isFunction = isFunctionService(service);
   const isWorker = service.runtimeMode === "worker";
   const rootDir = service.rootDir || ".";
   const sourceLabel = repoLabel(service, isDatabase, databaseEngine);
-  const sourceMeta = isDatabase ? "Managed database" : isWorker ? "Background worker" : isDockerImage ? "Docker image" : service.branch;
+  const sourceMeta = isDatabase ? "Managed database" : isFunction ? "Function source" : isWorker ? "Background worker" : isDockerImage ? "Docker image" : service.branch;
   const link = serviceLink(service, isDatabase);
   const warnings = warningItems({ service, deployments, env, domains, isDatabase, isDockerImage });
   const linkedSlugs = linkedServiceSlugs(env);
@@ -189,7 +194,7 @@ export function ServiceOverviewPanel({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-3">
               <div className="grid h-12 w-12 shrink-0 place-items-center border border-zinc-800 bg-zinc-900 p-2">
-                <FrameworkMark framework={service.framework} size={26} fallback={<AppIcon icon={isDatabase ? DatabaseIcon : isDockerImage ? PackageIcon : GithubIcon} size={22} className="text-zinc-300" />} />
+                <FrameworkMark framework={service.framework} size={26} fallback={<AppIcon icon={isDatabase ? DatabaseIcon : isFunction ? FunctionIcon : isDockerImage ? PackageIcon : GithubIcon} size={22} className="text-zinc-300" />} />
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
