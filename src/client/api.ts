@@ -831,6 +831,54 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ apiToken, projectId, config })
     }),
+  vercelTeams: (apiToken: string) =>
+    request<{ teams: Array<{ id: string; slug: string; name: string }> }>("/api/integrations/vercel/teams", {
+      method: "POST",
+      body: JSON.stringify({ apiToken })
+    }),
+  vercelProjects: (apiToken: string, teamId?: string) =>
+    request<{
+      projects: Array<{
+        id: string;
+        name: string;
+        framework: string | null;
+        kind: "git" | "unsupported";
+        sourceLabel: string;
+      }>;
+    }>("/api/integrations/vercel/projects", {
+      method: "POST",
+      body: JSON.stringify({ apiToken, teamId })
+    }),
+  vercelProjectDetails: (apiToken: string, projectId: string, teamId?: string) =>
+    request<{
+      details: {
+        id: string;
+        name: string;
+        framework: string | null;
+        rootDirectory: string | null;
+        buildCommand: string | null;
+        installCommand: string | null;
+        branch: string | null;
+        kind: "git" | "unsupported";
+        sourceLabel: string;
+        unsupportedReason: string | null;
+        targets: Array<"production" | "preview" | "development">;
+      };
+    }>("/api/integrations/vercel/project-details", {
+      method: "POST",
+      body: JSON.stringify({ apiToken, projectId, teamId })
+    }),
+  vercelImport: (apiToken: string, projectId: string, teamId: string | undefined, config?: unknown) =>
+    request<{
+      ok: boolean;
+      projectSlug: string;
+      importedCustomDomainCount?: number;
+      importedVariableCount?: number;
+      skippedSensitiveCount?: number;
+    }>("/api/integrations/vercel/import", {
+      method: "POST",
+      body: JSON.stringify({ apiToken, projectId, teamId, config })
+    }),
   systemSettings: () =>
     request<{
       settings: SystemSettings;
