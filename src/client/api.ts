@@ -1,4 +1,5 @@
 import type { AiProviderId, AiProviderModel } from "../shared/ai-providers";
+import type { FunctionRuntime } from "../shared/service-functions";
 export type { AiProviderId, AiProviderModel } from "../shared/ai-providers";
 
 export type Framework = {
@@ -24,6 +25,7 @@ export type Service = {
   repoFullName: null | string;
   repoUrl: string;
   dockerImage: null | string;
+  functionRuntime: null | FunctionRuntime;
   branch: string;
   rootDir: null | string;
   hasGithubToken: boolean;
@@ -608,6 +610,13 @@ export type ServiceOverview = {
   publicIp?: string;
 };
 
+export type FunctionSource = {
+  runtime: FunctionRuntime;
+  sourceCode: string;
+  fileName: string;
+  updatedAt: string;
+};
+
 export type GitHubRepo = {
   id: string;
   fullName: string;
@@ -732,6 +741,9 @@ export const api = {
     ),
   deleteProject: (projectId: string) => request(`/api/projects/${projectId}`, { method: "DELETE" }),
   serviceOverview: (serviceId: string) => request<ServiceOverview>(`/api/services/${serviceId}/overview`),
+  functionSource: (serviceId: string) => request<{ source: FunctionSource }>(`/api/services/${serviceId}/function-source`),
+  updateFunctionSource: (serviceId: string, body: { runtime?: FunctionRuntime; sourceCode?: string }) =>
+    request<{ source: FunctionSource; service: Service | null }>(`/api/services/${serviceId}/function-source`, { method: "PATCH", body: JSON.stringify(body) }),
   updateService: (serviceId: string, body: unknown) =>
     request<{ service: Service }>(`/api/services/${serviceId}`, { method: "PATCH", body: JSON.stringify(body) }),
   transferService: (serviceId: string, body: { targetProjectId: string }) =>
