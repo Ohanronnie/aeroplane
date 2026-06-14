@@ -35,6 +35,8 @@ import { detectDockerfileBuild, dockerBuildArgs } from "./dockerfile-build.js";
 import { dockerImageForService, isDockerImageService } from "../shared/service-source.js";
 import { ensurePostgresLogicalReplication } from "./postgres-logical-replication.js";
 import { isWorkerService } from "../shared/service-runtime.js";
+import { isFunctionService } from "../shared/service-functions.js";
+import { functionRuntimeLabel, writeFunctionDeploymentProject } from "./service-functions.js";
 
 type RunOptions = {
   cwd?: string;
@@ -726,6 +728,7 @@ export function enqueueDeployment(serviceId: string, options: EnqueueOptions) {
 async function runDeployment(deployment: Deployment, service: Service) {
   const startedAt = now();
   const isDatabase = isDatabaseService(service);
+  const isFunction = isFunctionService(service);
   const containerName = containerNameForService(service.id);
   const env = getEnvForService(service.id);
   const runtimePort = runtimePortForService(service, env);
@@ -1079,7 +1082,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
 
   try {
     if (config.deployDryRun) {
-      appendDeploymentLog(deployment.id, "Dry-run mode is enabled. Skipping clone, Railpack build, and Docker run.");
+      appendDeploymentLog(deployment.id, isFunction ? "Dry-run mode is enabled. Skipping function source generation, Docker build, and Docker run." : "Dry-run mode is enabled. Skipping clone, Railpack build, and Docker run.");
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 800));
       const deployedAt = now();
       const isWorker = isWorkerService(service);
@@ -1098,17 +1101,22 @@ async function runDeployment(deployment: Deployment, service: Service) {
       return;
     }
 
-    const authToken = await cloneAuthTokenForService(service);
-    if (authToken) {
-      secrets.push(authToken);
-    }
-    const cloneUrl = cloneUrlWithToken(service.repoUrl, authToken);
-    await runCommand("git", ["clone", "--depth", "1", "--branch", service.branch, cloneUrl, sourceDir], deployment.id, {
-      redact: secrets
-    });
+    if (isFunction) {
+      const functionSource = writeFunctionDeploymentProject(service.id, sourceDir);
+      appendDeploymentLog(deployment.id, `Generated ${functionRuntimeLabel(functionSource.runtime)} function runtime project from saved source.`);
+    } else {
+      const authToken = await cloneAuthTokenForService(service);
+      if (authToken) {
+        secrets.push(authToken);
+      }
+      const cloneUrl = cloneUrlWithToken(service.repoUrl, authToken);
+      await runCommand("git", ["clone", "--depth", "1", "--branch", service.branch, cloneUrl, sourceDir], deployment.id, {
+        redact: secrets
+      });
 
-    if (deployment.commitSha) {
-      await runCommand("git", ["checkout", deployment.commitSha], deployment.id, { cwd: sourceDir });
+      if (deployment.commitSha) {
+        await runCommand("git", ["checkout", deployment.commitSha], deployment.id, { cwd: sourceDir });
+      }
     }
 
     const isStaticService = Boolean(service.staticOutput?.trim());
