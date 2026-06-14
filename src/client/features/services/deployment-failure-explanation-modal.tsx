@@ -1,10 +1,11 @@
 import { AiBrain01Icon, AlertCircleIcon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useState } from "react";
-import { api, type AiProviderStatus, type AiSettingsStatus, type Deployment, type DeploymentFailureExplanation } from "../../api";
+import { api, type AiSettingsStatus, type Deployment, type DeploymentFailureExplanation } from "../../api";
 import type { AiProviderId } from "../../../shared/ai-providers";
 import { ModalShell } from "../../components/modals/modal-shell";
 import { AppIcon, statusClass } from "../../components/ui/primitives";
 import { shortSha } from "../../lib/format";
+import { connectedAiProviders, initialAiProvider, modelForAiProvider } from "./ai-provider-selection";
 import { DeploymentFailureCommand } from "./deployment-failure-command";
 import { DeploymentFailureModelPicker } from "./deployment-failure-model-picker";
 
@@ -22,21 +23,6 @@ const loadingMessages = [
   "Preparing the likely cause...",
   "Drafting the suggested fix..."
 ];
-
-function connectedAiProviders(aiSettings: AiSettingsStatus | null) {
-  return aiSettings?.providers.filter((provider) => provider.connected) ?? [];
-}
-
-function initialProvider(aiSettings: AiSettingsStatus) {
-  const connectedProviders = connectedAiProviders(aiSettings);
-  return connectedProviders.find((provider) => provider.id === aiSettings.defaultProvider) ?? connectedProviders[0] ?? null;
-}
-
-function modelForProvider(provider: AiProviderStatus | null, aiSettings: AiSettingsStatus | null) {
-  if (!provider) return "";
-  if (provider.id === aiSettings?.defaultProvider && aiSettings.defaultModel) return aiSettings.defaultModel;
-  return provider.selectedModel || provider.models[0]?.id || "";
-}
 
 export function DeploymentFailureExplanationModal({
   deployment,
@@ -71,10 +57,10 @@ export function DeploymentFailureExplanationModal({
     void api.aiSettings()
       .then((response) => {
         if (cancelled) return;
-        const provider = initialProvider(response.ai);
+        const provider = initialAiProvider(response.ai);
         setAiSettings(response.ai);
         setSelectedProviderId(provider?.id ?? "");
-        setSelectedModel(modelForProvider(provider, response.ai));
+        setSelectedModel(modelForAiProvider(provider, response.ai));
         setError(provider ? "" : "Save an AI provider API key in Settings before explaining deployment failures.");
       })
       .catch((issue) => {
