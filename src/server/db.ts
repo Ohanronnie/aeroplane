@@ -157,6 +157,14 @@ CREATE TABLE IF NOT EXISTS service_import_sources (
   UNIQUE(project_id, provider, external_project_id, external_environment_id, external_service_id)
 );
 
+CREATE TABLE IF NOT EXISTS service_functions (
+  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  runtime TEXT NOT NULL,
+  source_code TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
