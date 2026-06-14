@@ -98,10 +98,10 @@ export function FunctionSourceEditor({
   }, [disabled, runtime]);
 
   return (
-    <div className="overflow-hidden border border-zinc-700 bg-zinc-950">
+    <div className="overflow-hidden border border-zinc-700 bg-zinc-950" style={{ height }}>
       <CodeMirror
         value={value}
-        height={height}
+        height="100%"
         basicSetup={functionSourceBasicSetup}
         extensions={extensions}
         onChange={onChange}
