@@ -138,8 +138,22 @@ import {
   isDockerImageService,
   validateDockerImageReference
 } from "../shared/service-source.js";
+import {
+  FUNCTION_REPO_URL,
+  functionRepoFullName,
+  functionRuntimes,
+  functionRuntimeForService,
+  isFunctionService
+} from "../shared/service-functions.js";
 import { isWorkerService, normalizeServiceRuntimeMode, serviceRuntimeModes } from "../shared/service-runtime.js";
 import { projectActivityTimestamp, sortProjectsByRecentActivity } from "./project-activity.js";
+import {
+  createServiceFunction,
+  deleteServiceFunctionSource,
+  functionRuntimeLabel,
+  getServiceFunctionSource,
+  updateServiceFunctionSource
+} from "./service-functions.js";
 
 const app = new Hono();
 
@@ -190,16 +204,17 @@ const clearableDockerfilePath = z.preprocess((value) => {
   { message: "Invalid Dockerfile path" }
 );
 const repoSchema = z.string().trim().min(1).refine((value) => {
-  return value.startsWith("https://") || value.startsWith("git@") || value === "database" || value === DOCKER_IMAGE_REPO_URL;
+  return value.startsWith("https://") || value.startsWith("git@") || value === "database" || value === DOCKER_IMAGE_REPO_URL || value === FUNCTION_REPO_URL;
 }, {
-  message: "Use an HTTPS Git URL, SSH Git URL, database, or Docker image source"
+  message: "Use an HTTPS Git URL, SSH Git URL, database, Docker image, or function source"
 });
 const repoFullNameSchema = z.string().trim().refine((value) => {
   if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value) || value.startsWith("database:")) return true;
+  if (value.startsWith("function:")) return functionRuntimes.includes(value.slice("function:".length) as (typeof functionRuntimes)[number]);
   if (!value.startsWith("image:")) return false;
   return validateDockerImageReference(value.slice("image:".length)).ok;
 }, {
-  message: "Choose a GitHub repository, database engine, or Docker image"
+  message: "Choose a GitHub repository, database engine, Docker image, or function runtime"
 });
 const githubRepoFullNameSchema = z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "Choose a GitHub repository");
 const dockerImageSchema = z.string().trim().optional().superRefine((value, ctx) => {
@@ -242,7 +257,9 @@ const serviceSettingsSchema = z.object({
   internalPort: z.coerce.number().int().min(1).max(65535).default(8080),
   databasePublicEnabled: z.boolean().optional().default(true),
   databasePublicHostname: publicHostnameSchema,
-  postgresLogicalReplicationEnabled: z.boolean().optional().default(true)
+  postgresLogicalReplicationEnabled: z.boolean().optional().default(true),
+  functionRuntime: z.enum(functionRuntimes).optional(),
+  sourceCode: z.string().optional()
 });
 
 const createProjectSchema = z.object({
@@ -415,6 +432,26 @@ const createServiceSchema = serviceSettingsSchema.extend({
   name: z.string().trim().min(1),
   env: z.array(envSchema).optional().default([])
 }).superRefine((value, ctx) => {
+  const isFunction = value.repoUrl === FUNCTION_REPO_URL || value.repoFullName?.startsWith("function:");
+  if (isFunction) {
+    if (!value.functionRuntime && !value.repoFullName?.startsWith("function:")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["functionRuntime"],
+        message: "Function runtime is required"
+      });
+      return;
+    }
+    if (!value.sourceCode?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceCode"],
+        message: "Function source code is required"
+      });
+    }
+    return;
+  }
+
   const repoFullNameImage = value.repoFullName?.startsWith("image:") ? dockerImageForService({ repoFullName: value.repoFullName }) : "";
   if (value.repoUrl === DOCKER_IMAGE_REPO_URL && !value.dockerImage && !repoFullNameImage) {
     ctx.addIssue({
@@ -430,7 +467,7 @@ const createServiceSchema = serviceSettingsSchema.extend({
   ctx.addIssue({
     code: z.ZodIssueCode.custom,
     path: ["repoUrl"],
-    message: "Choose a GitHub repository, Git URL, or database"
+    message: "Choose a GitHub repository, Git URL, database, Docker image, or function"
   });
 });
 const envExampleSuggestionsQuerySchema = z.object({
@@ -458,6 +495,12 @@ const updateServiceSchema = z.object({
   databasePublicEnabled: z.boolean().optional(),
   databasePublicHostname: publicHostnameSchema,
   postgresLogicalReplicationEnabled: z.boolean().optional()
+});
+const functionSourceUpdateSchema = z.object({
+  runtime: z.enum(functionRuntimes).optional(),
+  sourceCode: z.string().optional()
+}).refine((value) => value.runtime !== undefined || value.sourceCode !== undefined, {
+  message: "Nothing to update"
 });
 const transferServiceSchema = z.object({
   targetProjectId: z.string().trim().min(1)
@@ -697,6 +740,7 @@ async function publicService(service: Service, options: PublicServiceOptions = {
   const normalizedService = ensureDatabasePublicDefaults(service) ?? service;
   const isDatabase = isDatabaseService(normalizedService);
   const isDockerImage = isDockerImageService(normalizedService);
+  const isFunction = isFunctionService(normalizedService);
   const isWorker = isWorkerService(normalizedService);
   const isStaticSite = !isDatabase && !isWorker && Boolean(normalizedService.staticOutput?.trim());
   service = normalizedService;
@@ -735,7 +779,18 @@ async function publicService(service: Service, options: PublicServiceOptions = {
     ? { hostname: preferredDomain.hostname, status: preferredDomain.status }
     : null;
   const detectServiceFramework = options.frameworkDetection === "preview" ? detectFrameworkPreview : detectFramework;
-  const framework = isDockerImage
+  const functionRuntime = isFunction ? functionRuntimeForService(service) : null;
+  const functionRuntimeEntry = functionRuntime
+    ? FRAMEWORK_ICON_CATALOG.find((entry) => entry.slug === (functionRuntime === "node" ? "nodejs" : functionRuntime))
+    : null;
+  const framework = functionRuntime && functionRuntimeEntry
+    ? {
+        slug: functionRuntimeEntry.slug,
+        name: functionRuntimeLabel(functionRuntime),
+        logoUrl: frameworkIconUrl(functionRuntimeEntry.slug),
+        website: functionRuntimeEntry.website ?? null
+      }
+    : isDockerImage
     ? null
     : await detectServiceFramework(service.repoFullName, service.branch, service.rootDir, {
         buildCommand: service.buildCommand,
@@ -752,6 +807,7 @@ async function publicService(service: Service, options: PublicServiceOptions = {
     repoFullName: service.repoFullName,
     repoUrl: service.repoUrl,
     dockerImage: isDockerImage ? dockerImageForService(service) : null,
+    functionRuntime,
     branch: service.branch,
     rootDir: service.rootDir,
     hasGithubToken: Boolean(service.githubToken),
@@ -808,12 +864,20 @@ async function summarizeProject(project: ProjectGroup, projectServices: Service[
 function createServiceRecord(projectId: string, input: z.infer<typeof createServiceSchema>) {
   const timestamp = nowIso();
   const serviceSlug = createUniqueSlug(input.name, getServiceSlugSet(projectId));
+  const inputFunctionRuntime = input.functionRuntime ?? functionRuntimeForService({ repoFullName: input.repoFullName ?? null, repoUrl: input.repoUrl ?? "" });
   const inputDockerImage = input.dockerImage ?? (input.repoFullName?.startsWith("image:") ? dockerImageForService({ repoFullName: input.repoFullName }) : "");
-  const repoFullName = inputDockerImage ? dockerImageRepoFullName(inputDockerImage) : input.repoFullName ?? null;
-  const repoUrl = inputDockerImage
+  const repoFullName = inputFunctionRuntime
+    ? functionRepoFullName(inputFunctionRuntime)
+    : inputDockerImage
+      ? dockerImageRepoFullName(inputDockerImage)
+      : input.repoFullName ?? null;
+  const repoUrl = inputFunctionRuntime
+    ? FUNCTION_REPO_URL
+    : inputDockerImage
     ? DOCKER_IMAGE_REPO_URL
     : input.repoUrl ?? (repoFullName?.startsWith("database:") ? "database" : repoFullName ? repoUrlFromFullName(repoFullName) : "");
   const isDatabase = repoUrl === "database" || (repoFullName?.startsWith("database:") ?? false);
+  const isFunction = isFunctionService({ repoFullName, repoUrl });
   const dbType = isDatabase ? databaseTypeForService({ repoFullName, repoUrl }) : "";
   const databasePublicHostname = isDatabase
     ? input.databasePublicHostname ?? defaultDatabasePublicHostname(serviceSlug)
@@ -827,15 +891,15 @@ function createServiceRecord(projectId: string, input: z.infer<typeof createServ
     repoFullName,
     repoUrl,
     branch: input.branch,
-    rootDir: input.rootDir ?? null,
-    githubToken: input.githubToken ?? null,
+    rootDir: isFunction ? null : input.rootDir ?? null,
+    githubToken: isFunction ? null : input.githubToken ?? null,
     webhookSecret: randomBytes(24).toString("hex"),
-    installCommand: input.installCommand ?? null,
-    buildCommand: input.buildCommand ?? null,
-    startCommand: input.startCommand ?? null,
-    staticOutput: input.staticOutput ?? null,
-    buildMethod: input.buildMethod ?? "auto",
-    dockerfilePath: input.dockerfilePath ?? null,
+    installCommand: isFunction ? null : input.installCommand ?? null,
+    buildCommand: isFunction ? null : input.buildCommand ?? null,
+    startCommand: isFunction ? null : input.startCommand ?? null,
+    staticOutput: isFunction ? null : input.staticOutput ?? null,
+    buildMethod: isFunction ? "dockerfile" : input.buildMethod ?? "auto",
+    dockerfilePath: isFunction ? "Dockerfile" : input.dockerfilePath ?? null,
     detectedBuildMethod: null,
     runtimeMode: isDatabase || input.staticOutput ? "web" : input.runtimeMode,
     internalPort: input.internalPort,
@@ -851,6 +915,10 @@ function createServiceRecord(projectId: string, input: z.infer<typeof createServ
   };
 
   db.insert(services).values(service).run();
+
+  if (isFunction) {
+    createServiceFunction(service.id, inputFunctionRuntime, input.sourceCode);
+  }
 
   if (isDatabase) {
     initializeDatabaseBackupSettings(service.id);
@@ -2161,6 +2229,44 @@ app.get("/api/services/:serviceId/overview", async (c) => {
   });
 });
 
+app.get("/api/services/:serviceId/function-source", (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
+  if (!isFunctionService(service)) {
+    return jsonError("Source Code is only available for function services.", 404);
+  }
+
+  const source = getServiceFunctionSource(service.id);
+  if (!source) {
+    return jsonError("Function source not found", 404);
+  }
+
+  return c.json({ source });
+});
+
+app.patch("/api/services/:serviceId/function-source", async (c) => {
+  const serviceAccess = getAuthorizedService(c);
+  if (serviceAccess.response) return serviceAccess.response;
+  const { service } = serviceAccess;
+  if (!isFunctionService(service)) {
+    return jsonError("Source Code is only available for function services.", 404);
+  }
+
+  const body = functionSourceUpdateSchema.safeParse(await c.req.json());
+  if (!body.success) {
+    return jsonError(body.error.issues[0]?.message ?? "Invalid function source");
+  }
+
+  try {
+    const source = updateServiceFunctionSource(service.id, body.data);
+    const updated = getServiceById(service.id);
+    return c.json({ source, service: updated ? await publicService(updated) : null });
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : "Could not update function source");
+  }
+});
+
 app.get("/api/services/:serviceId/suggestion-keys", async (c) => {
   const serviceAccess = getAuthorizedService(c);
   if (serviceAccess.response) return serviceAccess.response;
@@ -2564,7 +2670,9 @@ app.patch("/api/services/:serviceId", async (c) => {
           ? DOCKER_IMAGE_REPO_URL
           : repoFullName.startsWith("database:")
             ? "database"
-          : repoUrlFromFullName(repoFullName)
+            : repoFullName.startsWith("function:")
+              ? FUNCTION_REPO_URL
+              : repoUrlFromFullName(repoFullName)
         : service.repoUrl
       : updateData.repoUrl ?? service.repoUrl;
   if (dockerImage) {
@@ -2687,6 +2795,7 @@ app.delete("/api/services/:serviceId", async (c) => {
   await removeServiceRuntime(service);
   db.delete(domains).where(eq(domains.serviceId, service.id)).run();
   db.delete(envVars).where(eq(envVars.serviceId, service.id)).run();
+  deleteServiceFunctionSource(service.id);
 
   const serviceDeployments = db.select({ id: deployments.id }).from(deployments).where(eq(deployments.serviceId, service.id)).all();
   if (serviceDeployments.length > 0) {
@@ -2713,6 +2822,7 @@ app.delete("/api/projects/:projectId", async (c) => {
     await removeServiceRuntime(service);
     db.delete(domains).where(eq(domains.serviceId, service.id)).run();
     db.delete(envVars).where(eq(envVars.serviceId, service.id)).run();
+    deleteServiceFunctionSource(service.id);
     const serviceDeployments = db.select({ id: deployments.id }).from(deployments).where(eq(deployments.serviceId, service.id)).all();
     if (serviceDeployments.length > 0) {
       db.delete(deploymentLogs).where(inArray(deploymentLogs.deploymentId, serviceDeployments.map((row) => row.id))).run();
