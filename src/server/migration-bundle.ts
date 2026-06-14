@@ -36,6 +36,7 @@ const logicalTables = [
   "database_backups",
   "database_backup_settings",
   "service_import_sources",
+  "service_functions",
   "users"
 ] as const;
 
@@ -45,6 +46,7 @@ const deleteOrder = [
   "database_backups",
   "database_backup_settings",
   "service_import_sources",
+  "service_functions",
   "domains",
   "env_vars",
   "deployments",
