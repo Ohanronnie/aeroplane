@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type FunctionSource } from "../../api";
 import { AppIcon, FieldLabel, shellButton } from "../../components/ui/primitives";
 import { functionRuntimeFileNames, type FunctionRuntime } from "../../../shared/service-functions";
+import { FunctionCodeAiPanel } from "./function-code-ai-panel";
 import { FunctionSourceEditor } from "./function-source-editor";
 import { FunctionRuntimeDropdown } from "./function-runtime-dropdown";
 
@@ -103,7 +104,7 @@ export function FunctionSourcePanel({
         </div>
       </section>
 
-      <section className="min-h-0 flex-1">
+      <section className="flex min-h-0 flex-1 flex-col">
         <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <FieldLabel>Runtime</FieldLabel>
@@ -118,13 +119,25 @@ export function FunctionSourcePanel({
             {source?.updatedAt ? `Saved ${new Date(source.updatedAt).toLocaleString()}` : ""}
           </div>
         </div>
-        <FunctionSourceEditor
-          runtime={draft.runtime}
-          value={draft.sourceCode}
-          onChange={(sourceCode) => setDraft((current) => ({ ...current, sourceCode }))}
-          disabled={busy === "source"}
-          height="min(58vh, 620px)"
-        />
+        <div className="relative min-h-[420px] flex-1">
+          <FunctionSourceEditor
+            runtime={draft.runtime}
+            value={draft.sourceCode}
+            onChange={(sourceCode) => setDraft((current) => ({ ...current, sourceCode }))}
+            disabled={busy === "source"}
+            height="100%"
+          />
+          <div className="pointer-events-none absolute bottom-3 right-3 top-3 z-20 w-[360px] max-w-[calc(100%-1.5rem)]">
+            <FunctionCodeAiPanel
+              serviceId={serviceId}
+              runtime={draft.runtime}
+              sourceCode={draft.sourceCode}
+              disabled={busy === "source"}
+              className="pointer-events-auto"
+              onApply={(sourceCode) => setDraft((current) => ({ ...current, sourceCode }))}
+            />
+          </div>
+        </div>
       </section>
     </div>
   );
