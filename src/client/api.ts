@@ -617,6 +617,13 @@ export type FunctionSource = {
   updatedAt: string;
 };
 
+export type FunctionCodeGeneration = {
+  sourceCode: string;
+  provider: AiProviderId;
+  providerName: string;
+  model: string;
+};
+
 export type GitHubRepo = {
   id: string;
   fullName: string;
@@ -744,6 +751,8 @@ export const api = {
   functionSource: (serviceId: string) => request<{ source: FunctionSource }>(`/api/services/${serviceId}/function-source`),
   updateFunctionSource: (serviceId: string, body: { runtime?: FunctionRuntime; sourceCode?: string }) =>
     request<{ source: FunctionSource; service: Service | null }>(`/api/services/${serviceId}/function-source`, { method: "PATCH", body: JSON.stringify(body) }),
+  generateFunctionSource: (serviceId: string, body: { prompt: string; runtime: FunctionRuntime; sourceCode?: string; providerId?: AiProviderId; model?: string }) =>
+    request<{ generation: FunctionCodeGeneration }>(`/api/services/${serviceId}/function-source/generate`, { method: "POST", body: JSON.stringify(body) }),
   updateService: (serviceId: string, body: unknown) =>
     request<{ service: Service }>(`/api/services/${serviceId}`, { method: "PATCH", body: JSON.stringify(body) }),
   transferService: (serviceId: string, body: { targetProjectId: string }) =>
