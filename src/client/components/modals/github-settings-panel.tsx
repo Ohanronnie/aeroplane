@@ -8,6 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { FormEvent, useEffect, useState } from "react";
 import { api, type GitHubSettingsStatus } from "../../api";
+import { startGitHubAppManifestFlow } from "../../lib/github-app-manifest";
 import { AppIcon, FieldLabel, FormInput, shellButton, statusClass } from "../ui/primitives";
 
 type GitHubFormState = {
@@ -63,6 +64,7 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
   const [editing, setEditing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
@@ -117,6 +119,30 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
       setError(issue instanceof Error ? issue.message : "Could not save GitHub settings");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function connectOneClick() {
+    setConnecting(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await startGitHubAppManifestFlow({ redirectTo: "settings" });
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      const refreshed = await api.githubSettings();
+      setGithub(refreshed);
+      setForm(formFromSettings(refreshed));
+      setEditing(false);
+      setDisconnecting(false);
+      setSuccess("GitHub App created and connected. Install it on your repositories to finish.");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Could not connect to GitHub");
+    } finally {
+      setConnecting(false);
     }
   }
 
@@ -238,6 +264,23 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
               <AppIcon icon={LinkSquare02Icon} size={14} />
               Create GitHub App
             </a>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 px-4 py-3">
+            <div className="min-w-0">
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7fe3dd]">One-click connect</div>
+              <div className="text-sm text-zinc-200">Create the GitHub App and fill in every credential automatically.</div>
+            </div>
+            <button type="button" onClick={() => void connectOneClick()} disabled={connecting || busy} className={shellButton("primary")}>
+              <AppIcon icon={GithubIcon} size={15} />
+              {connecting ? "Connecting…" : "Connect with GitHub"}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+            <span className="h-px flex-1 bg-zinc-800" />
+            or enter manually
+            <span className="h-px flex-1 bg-zinc-800" />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">

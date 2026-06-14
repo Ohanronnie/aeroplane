@@ -918,6 +918,11 @@ export const api = {
     }),
   disconnectAiProvider: (providerId: AiProviderId) =>
     request<{ ok: boolean; ai: AiSettingsStatus }>(`/api/system/ai/providers/${providerId}`, { method: "DELETE" }),
+  githubManifest: (body: { redirectTo: "onboarding" | "settings"; organization?: string }) =>
+    request<{ postUrl: string; manifest: string }>("/api/github/manifest", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
   githubSettings: () => request<GitHubSettingsStatus>("/api/system/github"),
   updateGithubSettings: (body: {
     githubAccessToken?: string;
