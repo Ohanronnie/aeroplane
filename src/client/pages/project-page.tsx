@@ -6,6 +6,7 @@ import {
   Cancel01Icon,
   Delete02Icon,
   FolderOpenIcon,
+  FunctionIcon,
   GitBranchIcon,
   GithubIcon,
   PackageIcon,
@@ -36,6 +37,7 @@ import { serviceIsDeploying } from "../lib/deployment-status";
 import { formatTime } from "../lib/format";
 import { usePageTitle } from "../lib/page-title";
 import { dockerImageForService, isDatabaseService, isDockerImageService } from "../../shared/service-source";
+import { functionRuntimeLabels, isFunctionService } from "../../shared/service-functions";
 
 function StatusPill({ status }: { status: string }) {
   const tone =
@@ -364,17 +366,20 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
                   {currentProject.services.map((service) => {
                     const isDatabase = isDatabaseService(service);
                     const isDockerImage = isDockerImageService(service);
+                    const isFunction = isFunctionService(service);
                     const visibleUrl = (
                       service.primaryUrl || service.localUrl
                     ).replace("127.0.0.1", window.location.hostname);
                     const visibleLabel = visibleUrl.replace(/^https?:\/\//, "");
                     const repoLabel =
-                      service.dockerImage ||
-                      (isDockerImage ? dockerImageForService(service) : "") ||
-                      service.repoFullName ||
-                      service.repoUrl
-                        .replace(/^https?:\/\//, "")
-                        .replace(/^github\.com\//, "");
+                      isFunction
+                        ? `${functionRuntimeLabels[service.functionRuntime ?? "node"]} function`
+                        : service.dockerImage ||
+                          (isDockerImage ? dockerImageForService(service) : "") ||
+                          service.repoFullName ||
+                          service.repoUrl
+                            .replace(/^https?:\/\//, "")
+                            .replace(/^github\.com\//, "");
                     const rootLabel = service.rootDir
                       ? service.rootDir
                       : "repository root";
@@ -402,7 +407,7 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
                                 fallback={
                                   <AppIcon
                                     icon={
-                                      isDatabase ? CloudServerIcon : isDockerImage ? PackageIcon : Globe02Icon
+                                      isDatabase ? CloudServerIcon : isFunction ? FunctionIcon : isDockerImage ? PackageIcon : Globe02Icon
                                     }
                                     size={20}
                                     className="text-zinc-400"
@@ -467,14 +472,14 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
                             <>
                               <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full bg-zinc-800/90 px-3 py-1.5 text-xs font-normal text-zinc-300">
                                 <AppIcon
-                                  icon={isDockerImage ? PackageIcon : GithubIcon}
+                                  icon={isFunction ? FunctionIcon : isDockerImage ? PackageIcon : GithubIcon}
                                   size={15}
                                   className="flex-none"
                                 />
                                 <span className="truncate">{repoLabel}</span>
                               </div>
 
-                              {isDockerImage ? null : (
+                              {isDockerImage || isFunction ? null : (
                                 <div className="mt-4 flex min-w-0 items-center gap-2 text-sm text-zinc-300">
                                   <AppIcon
                                     icon={FolderOpenIcon}
@@ -493,7 +498,7 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
                                     service.lastDeployedAt ?? service.updatedAt,
                                   )}
                                 </span>
-                                {isDockerImage ? null : (
+                                {isDockerImage || isFunction ? null : (
                                   <>
                                     <span>on</span>
                                     <span className="inline-flex items-center gap-1.5">
