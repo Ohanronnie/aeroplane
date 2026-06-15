@@ -69,12 +69,22 @@ function now() {
   return nowIso();
 }
 
+// Docker reference components only allow `.`, `_`, `__`, or runs of `-` between
+// alphanumerics. Collapse any other separator run (e.g. `_-` from a nanoid id,
+// `___`, `..`) to a single `-`, leaving already-valid separators untouched.
+function normalizeDockerSeparators(value: string) {
+  return value.replace(/[._-]+/g, (sep) => {
+    if (/^-+$/.test(sep) || sep === "_" || sep === "__" || sep === ".") return sep;
+    return "-";
+  });
+}
+
 function safeSlug(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "").slice(0, 48) || "app";
+  return normalizeDockerSeparators(value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "").slice(0, 48) || "app";
 }
 
 function safeDockerIdentifier(value: string, fallback: string) {
-  return value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "") || fallback;
+  return normalizeDockerSeparators(value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "") || fallback;
 }
 
 export function containerNameForService(serviceId: string) {
