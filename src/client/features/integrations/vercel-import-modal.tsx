@@ -1,20 +1,26 @@
-import { useState, useEffect } from "react";
 import {
-  Alert02Icon,
-  ArrowLeft01Icon,
-  CheckmarkCircle02Icon,
   GithubIcon,
-  Search01Icon,
-  WorkflowSquare07Icon,
   Globe02Icon,
-  Settings01Icon
+  Alert02Icon,
+  Search01Icon,
+  Settings01Icon,
+  ArrowLeft01Icon,
+  WorkflowSquare07Icon,
+  CheckmarkCircle02Icon,
 } from "@hugeicons/core-free-icons";
+import { useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
+
 import { api } from "../../api";
-import { ModalShell } from "../../components/modals/modal-shell";
+import {
+  AppIcon,
+  FormInput,
+  FieldLabel,
+  shellButton,
+} from "../../components/ui/primitives";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dropdown } from "../../components/ui/dropdown";
-import { AppIcon, FieldLabel, FormInput, shellButton } from "../../components/ui/primitives";
+import { ModalShell } from "../../components/modals/modal-shell";
 import { VercelMigrationOptions } from "./vercel-migration-options";
 
 interface VercelTeam {
@@ -26,9 +32,9 @@ interface VercelTeam {
 interface VercelProject {
   id: string;
   name: string;
+  sourceLabel: string;
   framework: string | null;
   kind: "git" | "unsupported";
-  sourceLabel: string;
 }
 
 type VercelEnvTarget = "production" | "preview" | "development";
@@ -36,15 +42,15 @@ type VercelEnvTarget = "production" | "preview" | "development";
 interface VercelProjectDetails {
   id: string;
   name: string;
-  framework: string | null;
-  rootDirectory: string | null;
-  buildCommand: string | null;
-  installCommand: string | null;
-  branch: string | null;
-  kind: "git" | "unsupported";
   sourceLabel: string;
-  unsupportedReason: string | null;
+  branch: string | null;
+  framework: string | null;
   targets: VercelEnvTarget[];
+  kind: "git" | "unsupported";
+  buildCommand: string | null;
+  rootDirectory: string | null;
+  installCommand: string | null;
+  unsupportedReason: string | null;
 }
 
 interface VercelImportModalProps {
@@ -53,144 +59,210 @@ interface VercelImportModalProps {
   onSuccess: () => void;
 }
 
+type ImportSummary = {
+  skippedSensitiveCount?: number;
+  importedVariableCount?: number;
+  importedCustomDomainCount?: number;
+};
+
+type Step = "auth" | "select" | "configure" | "importing" | "success";
+
+type State = {
+  step: Step;
+  busy: boolean;
+  scope: string;
+  error: string;
+  apiToken: string;
+  teams: VercelTeam[];
+  autoDeploy: boolean;
+  searchQuery: string;
+  importedSlug: string;
+  rememberToken: boolean;
+  target: VercelEnvTarget;
+  projects: VercelProject[];
+  excludeSystemVars: boolean;
+  summary: ImportSummary | null;
+  selectedProject: VercelProject | null;
+  projectDetails: VercelProjectDetails | null;
+};
+
 const PERSONAL_SCOPE = "";
 
 const targetLabel: Record<VercelEnvTarget, string> = {
-  production: "Production",
   preview: "Preview",
-  development: "Development"
+  production: "Production",
+  development: "Development",
 };
 
-export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModalProps) {
-  const navigate = useNavigate();
-  const [step, setStep] = useState<"auth" | "select" | "configure" | "importing" | "success">("auth");
-  const [apiToken, setApiToken] = useState("");
-  const [teams, setTeams] = useState<VercelTeam[]>([]);
-  const [scope, setScope] = useState<string>(PERSONAL_SCOPE);
-  const [projects, setProjects] = useState<VercelProject[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProject, setSelectedProject] = useState<VercelProject | null>(null);
-  const [projectDetails, setProjectDetails] = useState<VercelProjectDetails | null>(null);
-  const [importedSlug, setImportedSlug] = useState("");
-  const [rememberToken, setRememberToken] = useState(() => {
-    const saved = localStorage.getItem("vercel_remember_token");
-    return saved !== "false";
-  });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+function createInitialState(): State {
+  return {
+    teams: [],
+    error: "",
+    busy: false,
+    step: "auth",
+    projects: [],
+    apiToken: "",
+    summary: null,
+    searchQuery: "",
+    autoDeploy: true,
+    importedSlug: "",
+    target: "production",
+    projectDetails: null,
+    selectedProject: null,
+    scope: PERSONAL_SCOPE,
+    excludeSystemVars: true,
+    rememberToken: localStorage.getItem("vercel_remember_token") !== "false",
+  };
+}
 
-  const [target, setTarget] = useState<VercelEnvTarget>("production");
-  const [excludeSystemVars, setExcludeSystemVars] = useState(true);
-  const [autoDeploy, setAutoDeploy] = useState(true);
+export function VercelImportModal({
+  open,
+  onClose,
+  onSuccess,
+}: VercelImportModalProps) {
+  const navigate = useNavigate();
+  const [state, setState] = useState<State>(createInitialState);
+  const update = (patch: Partial<State>) =>
+    setState((current) => ({ ...current, ...patch }));
+  const {
+    step,
+    apiToken,
+    teams,
+    scope,
+    projects,
+    searchQuery,
+    selectedProject,
+    projectDetails,
+    importedSlug,
+    summary,
+    rememberToken,
+    busy,
+    error,
+    target,
+    excludeSystemVars,
+    autoDeploy,
+  } = state;
 
   useEffect(() => {
     if (open) {
       const savedToken = localStorage.getItem("vercel_api_token");
-      if (savedToken) {
-        setApiToken(savedToken);
-      }
+      if (savedToken) update({ apiToken: savedToken });
     }
   }, [open]);
 
   const filteredProjects = projects.filter(
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sourceLabel.toLowerCase().includes(searchQuery.toLowerCase())
+      p.sourceLabel.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  async function loadProjectsForScope(token: string, teamId: string) {
+  async function loadProjects(token: string, teamId: string) {
     const data = await api.vercelProjects(token, teamId || undefined);
-    setProjects(data.projects);
+    update({ projects: data.projects });
   }
 
   async function handleConnect() {
     if (!apiToken.trim()) return;
     const token = apiToken.trim();
-    setBusy(true);
-    setError("");
+    update({ busy: true, error: "" });
     try {
-      const teamData = await api.vercelTeams(token).catch(() => ({ teams: [] }));
-      await loadProjectsForScope(token, PERSONAL_SCOPE);
-      localStorage.setItem("vercel_remember_token", rememberToken ? "true" : "false");
+      const teamData = await api
+        .vercelTeams(token)
+        .catch(() => ({ teams: [] }));
+      await loadProjects(token, PERSONAL_SCOPE);
+      localStorage.setItem(
+        "vercel_remember_token",
+        rememberToken ? "true" : "false",
+      );
       if (rememberToken) {
         localStorage.setItem("vercel_api_token", token);
       } else {
         localStorage.removeItem("vercel_api_token");
       }
-      setTeams(teamData.teams);
-      setScope(PERSONAL_SCOPE);
-      setStep("select");
+      update({ teams: teamData.teams, scope: PERSONAL_SCOPE, step: "select" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid Vercel API Token or connection failed");
+      update({
+        error:
+          err instanceof Error
+            ? err.message
+            : "Invalid Vercel API Token or connection failed",
+      });
     } finally {
-      setBusy(false);
+      update({ busy: false });
     }
   }
 
   async function handleScopeChange(nextScope: string) {
-    setScope(nextScope);
-    setBusy(true);
-    setError("");
+    update({ scope: nextScope, busy: true, error: "" });
     try {
-      await loadProjectsForScope(apiToken.trim(), nextScope);
+      await loadProjects(apiToken.trim(), nextScope);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load Vercel projects");
+      update({
+        error:
+          err instanceof Error ? err.message : "Failed to load Vercel projects",
+      });
     } finally {
-      setBusy(false);
+      update({ busy: false });
     }
   }
 
   async function handleSelectProject(project: VercelProject) {
-    setSelectedProject(project);
-    setBusy(true);
-    setError("");
+    update({ selectedProject: project, busy: true, error: "" });
     try {
-      const data = await api.vercelProjectDetails(apiToken.trim(), project.id, scope || undefined);
-      setProjectDetails(data.details);
-      setTarget(data.details.targets[0] ?? "production");
-      setExcludeSystemVars(true);
-      setAutoDeploy(true);
-      setStep("configure");
+      const data = await api.vercelProjectDetails(
+        apiToken.trim(),
+        project.id,
+        scope || undefined,
+      );
+      update({
+        projectDetails: data.details,
+        target: data.details.targets[0] ?? "production",
+        excludeSystemVars: true,
+        autoDeploy: true,
+        step: "configure",
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load project details");
+      update({
+        error:
+          err instanceof Error ? err.message : "Failed to load project details",
+      });
     } finally {
-      setBusy(false);
+      update({ busy: false });
     }
   }
 
   async function handleExecuteImport() {
     if (!selectedProject) return;
-    setStep("importing");
-    setBusy(true);
-    setError("");
+    update({ step: "importing", busy: true, error: "" });
     try {
       const config = { target, excludeSystemVars, autoDeploy };
-      const result = await api.vercelImport(apiToken.trim(), selectedProject.id, scope || undefined, config);
-      setImportedSlug(result.projectSlug);
-      setStep("success");
+      const result = await api.vercelImport(
+        apiToken.trim(),
+        selectedProject.id,
+        scope || undefined,
+        config,
+      );
+      update({
+        importedSlug: result.projectSlug,
+        summary: result,
+        step: "success",
+      });
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Migration failed");
-      setStep("configure");
+      update({
+        error: err instanceof Error ? err.message : "Migration failed",
+        step: "configure",
+      });
     } finally {
-      setBusy(false);
+      update({ busy: false });
     }
   }
 
   function handleClose() {
-    setStep("auth");
-    setApiToken("");
-    setTeams([]);
-    setScope(PERSONAL_SCOPE);
-    setProjects([]);
-    setSearchQuery("");
-    setSelectedProject(null);
-    setProjectDetails(null);
-    setImportedSlug("");
-    setError("");
-    setTarget("production");
-    setExcludeSystemVars(true);
-    setAutoDeploy(true);
+    setState((current) => ({
+      ...createInitialState(),
+      rememberToken: current.rememberToken,
+    }));
     onClose();
   }
 
@@ -198,12 +270,12 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
     step === "auth"
       ? Settings01Icon
       : step === "select"
-      ? Search01Icon
-      : step === "configure"
-      ? Settings01Icon
-      : step === "importing"
-      ? WorkflowSquare07Icon
-      : CheckmarkCircle02Icon;
+        ? Search01Icon
+        : step === "configure"
+          ? Settings01Icon
+          : step === "importing"
+            ? WorkflowSquare07Icon
+            : CheckmarkCircle02Icon;
 
   const isUnsupported = projectDetails?.kind === "unsupported";
 
@@ -217,12 +289,12 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
         step === "auth"
           ? "Step 1: Authenticate"
           : step === "select"
-          ? "Step 2: Choose Project"
-          : step === "configure"
-          ? "Step 3: Configure Migration"
-          : step === "importing"
-          ? "Migration In Progress"
-          : "Migration Complete"
+            ? "Step 2: Choose Project"
+            : step === "configure"
+              ? "Step 3: Configure Migration"
+              : step === "importing"
+                ? "Migration In Progress"
+                : "Migration Complete"
       }
       width="max-w-xl"
       bodyClassName="min-h-0 flex flex-1 flex-col overflow-hidden"
@@ -230,9 +302,10 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
       {step === "auth" && (
         <div className="space-y-5">
           <div className="text-sm text-zinc-300 leading-relaxed">
-            Migrate a Vercel project to your self-hosted Aeroplane control plane. The connected Git repository, build
-            commands, environment variables, and custom domains are imported. Builds then run through Railpack on your
-            own server.
+            Migrate a Vercel project to your self-hosted Aeroplane control
+            plane. The connected Git repository, build commands, environment
+            variables, and custom domains are imported. Builds then run through
+            Railpack on your own server.
           </div>
 
           <div>
@@ -250,7 +323,7 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
             <FormInput
               type="password"
               value={apiToken}
-              onChange={(e) => setApiToken(e.target.value)}
+              onChange={(e) => update({ apiToken: e.target.value })}
               placeholder="vercel_..."
               disabled={busy}
               autoComplete="new-password"
@@ -259,7 +332,7 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
             <div className="mt-3">
               <Checkbox
                 checked={rememberToken}
-                onChange={setRememberToken}
+                onChange={(value) => update({ rememberToken: value })}
                 disabled={busy}
                 label="Remember my Vercel token"
               >
@@ -277,7 +350,12 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
           )}
 
           <div className="flex justify-end gap-3 border-t border-zinc-800 pt-4 mt-5">
-            <button type="button" className={shellButton("ghost")} onClick={handleClose} disabled={busy}>
+            <button
+              type="button"
+              className={shellButton("ghost")}
+              onClick={handleClose}
+              disabled={busy}
+            >
               Cancel
             </button>
             <button
@@ -302,16 +380,20 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
               disabled={busy}
               options={[
                 { value: PERSONAL_SCOPE, label: "Personal Account" },
-                ...teams.map((team) => ({ value: team.id, label: team.name }))
+                ...teams.map((team) => ({ value: team.id, label: team.name })),
               ]}
             />
           </div>
 
           <div className="relative mb-4">
-            <AppIcon icon={Search01Icon} size={16} className="pointer-events-none absolute left-3 top-3 text-zinc-500" />
+            <AppIcon
+              icon={Search01Icon}
+              size={16}
+              className="pointer-events-none absolute left-3 top-3 text-zinc-500"
+            />
             <FormInput
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => update({ searchQuery: e.target.value })}
               placeholder="Search Vercel projects"
               className="pl-10"
             />
@@ -326,7 +408,9 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
           <div className="overflow-hidden border border-zinc-700 bg-zinc-900/85 flex-1 min-h-0">
             <div className="max-h-[300px] overflow-y-auto">
               {filteredProjects.length === 0 ? (
-                <div className="px-5 py-8 text-center font-mono text-xs text-zinc-400">No Vercel projects found.</div>
+                <div className="px-5 py-8 text-center font-mono text-xs text-zinc-400">
+                  No Vercel projects found.
+                </div>
               ) : (
                 filteredProjects.map((project) => {
                   const unsupported = project.kind === "unsupported";
@@ -336,9 +420,14 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
                       className="flex items-center justify-between gap-4 border-b border-zinc-800 px-4 py-3.5 last:border-b-0"
                     >
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-zinc-100">{project.name}</div>
+                        <div className="text-sm font-semibold text-zinc-100">
+                          {project.name}
+                        </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 truncate max-w-sm mt-0.5 font-mono">
-                          <AppIcon icon={unsupported ? Alert02Icon : GithubIcon} size={12} />
+                          <AppIcon
+                            icon={unsupported ? Alert02Icon : GithubIcon}
+                            size={12}
+                          />
                           {project.sourceLabel}
                         </div>
                       </div>
@@ -358,7 +447,12 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
           </div>
 
           <div className="flex justify-start border-t border-zinc-800 pt-4 mt-5">
-            <button type="button" className={shellButton("ghost")} onClick={() => setStep("auth")} disabled={busy}>
+            <button
+              type="button"
+              className={shellButton("ghost")}
+              onClick={() => update({ step: "auth" })}
+              disabled={busy}
+            >
               <AppIcon icon={ArrowLeft01Icon} size={16} />
               Back
             </button>
@@ -369,7 +463,8 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
       {step === "configure" && projectDetails && (
         <div className="flex flex-col min-h-full space-y-4">
           <div className="text-sm text-zinc-300 leading-relaxed mb-1">
-            Customize how <strong>{selectedProject?.name}</strong> is migrated to your self-hosted stack.
+            Customize how <strong>{selectedProject?.name}</strong> is migrated
+            to your self-hosted stack.
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -377,9 +472,14 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
               <FieldLabel>Environment Variables Target</FieldLabel>
               <Dropdown
                 value={target}
-                onChange={(value) => setTarget(value as VercelEnvTarget)}
+                onChange={(value) =>
+                  update({ target: value as VercelEnvTarget })
+                }
                 disabled={busy}
-                options={projectDetails.targets.map((value) => ({ value, label: targetLabel[value] }))}
+                options={projectDetails.targets.map((value) => ({
+                  value,
+                  label: targetLabel[value],
+                }))}
               />
               <div className="text-[10px] text-zinc-500 font-mono mt-1 uppercase tracking-wider">
                 Pull env vars from this Vercel target
@@ -390,8 +490,10 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
               busy={busy}
               excludeSystemVars={excludeSystemVars}
               autoDeploy={autoDeploy}
-              onExcludeSystemVarsChange={setExcludeSystemVars}
-              onAutoDeployChange={setAutoDeploy}
+              onExcludeSystemVarsChange={(value) =>
+                update({ excludeSystemVars: value })
+              }
+              onAutoDeployChange={(value) => update({ autoDeploy: value })}
             />
           </div>
 
@@ -400,15 +502,36 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
             <div className="border border-zinc-700 bg-zinc-900/85 px-4 py-3 space-y-1.5 font-mono text-[11px]">
               {isUnsupported ? (
                 <div className="flex items-start gap-2 text-amber-200">
-                  <AppIcon icon={Alert02Icon} size={14} className="mt-0.5 shrink-0" />
+                  <AppIcon
+                    icon={Alert02Icon}
+                    size={14}
+                    className="mt-0.5 shrink-0"
+                  />
                   <span>{projectDetails.unsupportedReason}</span>
                 </div>
               ) : (
                 <>
-                  <SummaryRow icon={GithubIcon} label="Repository" value={projectDetails.sourceLabel} />
-                  <SummaryRow label="Branch" value={projectDetails.branch || "main"} />
-                  {projectDetails.framework && <SummaryRow label="Framework" value={projectDetails.framework} />}
-                  {projectDetails.rootDirectory && <SummaryRow label="Root" value={projectDetails.rootDirectory} />}
+                  <SummaryRow
+                    icon={GithubIcon}
+                    label="Repository"
+                    value={projectDetails.sourceLabel}
+                  />
+                  <SummaryRow
+                    label="Branch"
+                    value={projectDetails.branch || "main"}
+                  />
+                  {projectDetails.framework && (
+                    <SummaryRow
+                      label="Framework"
+                      value={projectDetails.framework}
+                    />
+                  )}
+                  {projectDetails.rootDirectory && (
+                    <SummaryRow
+                      label="Root"
+                      value={projectDetails.rootDirectory}
+                    />
+                  )}
                 </>
               )}
             </div>
@@ -421,7 +544,12 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
           )}
 
           <div className="flex justify-between gap-3 border-t border-zinc-800 pt-4 mt-5">
-            <button type="button" className={shellButton("ghost")} onClick={() => setStep("select")} disabled={busy}>
+            <button
+              type="button"
+              className={shellButton("ghost")}
+              onClick={() => update({ step: "select" })}
+              disabled={busy}
+            >
               <AppIcon icon={ArrowLeft01Icon} size={16} />
               Back
             </button>
@@ -442,11 +570,19 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
         <div className="py-8 flex flex-col items-center justify-center text-center space-y-4">
           <div className="relative flex items-center justify-center">
             <div className="h-12 w-12 rounded-full border-2 border-t-2 border-zinc-700 border-t-zinc-100 animate-spin" />
-            <AppIcon icon={WorkflowSquare07Icon} size={18} className="absolute text-zinc-100" />
+            <AppIcon
+              icon={WorkflowSquare07Icon}
+              size={18}
+              className="absolute text-zinc-100"
+            />
           </div>
           <div>
-            <h3 className="font-semibold text-zinc-100 text-base">Migrating Project</h3>
-            <p className="text-xs text-zinc-400 font-mono mt-1">Importing "{selectedProject?.name}" from Vercel...</p>
+            <h3 className="font-semibold text-zinc-100 text-base">
+              Migrating Project
+            </h3>
+            <p className="text-xs text-zinc-400 font-mono mt-1">
+              Importing "{selectedProject?.name}" from Vercel...
+            </p>
           </div>
           <div className="w-64 h-1 border border-zinc-800 bg-zinc-950 overflow-hidden relative">
             <div className="absolute inset-y-0 bg-gradient-to-r from-zinc-100 to-zinc-500 w-1/2 rounded-full animate-marquee" />
@@ -465,19 +601,57 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
             <AppIcon icon={CheckmarkCircle02Icon} size={30} />
           </div>
           <div>
-            <h3 className="font-hero text-xl font-bold text-zinc-100">Migration Completed!</h3>
+            <h3 className="font-hero text-xl font-bold text-zinc-100">
+              Migration Completed!
+            </h3>
             <p className="text-sm text-zinc-300 max-w-sm mt-2">
-              Successfully imported "{selectedProject?.name}" from Vercel, including its Git source, build commands, and
-              environment variables.
+              Successfully imported "{selectedProject?.name}" from Vercel,
+              including its Git source and build commands.
             </p>
           </div>
+
+          {summary && (
+            <div className="w-full max-w-sm border border-zinc-800 bg-zinc-900/60 px-4 py-3 space-y-1.5 text-left font-mono text-[11px]">
+              <div className="flex justify-between text-zinc-300">
+                <span className="text-zinc-500 uppercase tracking-wider">
+                  Variables
+                </span>
+                <span>{summary.importedVariableCount ?? 0} imported</span>
+              </div>
+              <div className="flex justify-between text-zinc-300">
+                <span className="text-zinc-500 uppercase tracking-wider">
+                  Domains
+                </span>
+                <span>{summary.importedCustomDomainCount ?? 0} imported</span>
+              </div>
+              {Boolean(summary.skippedSensitiveCount) && (
+                <div className="flex items-start gap-2 border-t border-zinc-800 pt-2 mt-1 text-amber-200">
+                  <AppIcon
+                    icon={Alert02Icon}
+                    size={13}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span>
+                    {summary.skippedSensitiveCount} sensitive variable
+                    {summary.skippedSensitiveCount === 1 ? "" : "s"}{" "}
+                    couldn&apos;t be read from Vercel — add{" "}
+                    {summary.skippedSensitiveCount === 1 ? "it" : "them"}{" "}
+                    manually.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           <button
             type="button"
             className={shellButton("primary")}
             onClick={() => {
               handleClose();
-              void navigate({ to: "/$projectSlug", params: { projectSlug: importedSlug } });
+              void navigate({
+                to: "/$projectSlug",
+                params: { projectSlug: importedSlug },
+              });
             }}
           >
             <AppIcon icon={WorkflowSquare07Icon} size={16} />
@@ -489,7 +663,15 @@ export function VercelImportModal({ open, onClose, onSuccess }: VercelImportModa
   );
 }
 
-function SummaryRow({ icon, label, value }: { icon?: typeof GithubIcon; label: string; value: string }) {
+function SummaryRow({
+  icon,
+  label,
+  value,
+}: {
+  icon?: typeof GithubIcon;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="flex items-center gap-2 text-zinc-300">
       <span className="inline-flex items-center gap-1.5 w-24 shrink-0 text-zinc-500 uppercase tracking-wider text-[10px]">
