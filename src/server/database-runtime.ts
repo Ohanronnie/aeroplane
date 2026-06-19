@@ -38,3 +38,11 @@ export function databaseDataMountCandidates(dbType: string) {
 export function databaseDataVolumeArg(serviceId: string, dbType: string) {
   return `${databaseDataVolumeName(serviceId)}:${databaseDataMountPath(dbType)}`;
 }
+
+export function databaseContainerCommandArgs(dbType: string, env: Map<string, string> | Record<string, string>) {
+  const value = env instanceof Map ? env.get("REDIS_PASSWORD") : env.REDIS_PASSWORD;
+  if (dbType === "redis" && value) {
+    return ["redis-server", "--appendonly", "yes", "--requirepass", value];
+  }
+  return [];
+}
