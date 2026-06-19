@@ -14,7 +14,7 @@ import { getCloneTokenForRepo } from "./github-connect.js";
 import { resolveServiceEnv } from "./variable-resolver.js";
 import { databaseTypeForService, isDatabaseService } from "./database-urls.js";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
-import { databaseDataVolumeArg } from "./database-runtime.js";
+import { databaseContainerCommandArgs, databaseDataVolumeArg } from "./database-runtime.js";
 import { databaseImageForService } from "./database-source-image.js";
 import { ensureStableDatabaseDataVolume } from "./database-volume-adoption.js";
 import { ensureDefaultDomainForService } from "./service-domains.js";
@@ -835,6 +835,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
       if (postgresTlsAssets) {
         dockerArgs.push(...postgresTlsServerArgs());
       }
+      dockerArgs.push(...databaseContainerCommandArgs(dbType, env));
 
       appendDeploymentLog(deployment.id, `Running container mapping ${bindHost}:${service.hostPort} to internal port ${service.internalPort}...`);
       await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
