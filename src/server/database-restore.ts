@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { basename } from "node:path";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
 import { databaseTypeForService, isDatabaseService } from "./database-urls.js";
-import { databaseDataVolumeArg } from "./database-runtime.js";
+import { databaseContainerCommandArgs, databaseDataVolumeArg } from "./database-runtime.js";
 import { databaseImageForService } from "./database-source-image.js";
 import { ensureStableDatabaseDataVolume, type BufferedDockerResult } from "./database-volume-adoption.js";
 import { containerNameForService, getServiceById } from "./deploy.js";
@@ -133,6 +133,7 @@ async function startDatabaseContainer(service: Service, envMap: Map<string, stri
   if (postgresTlsAssets) {
     dockerArgs.push(...postgresTlsServerArgs());
   }
+  dockerArgs.push(...databaseContainerCommandArgs(dbType, envMap));
 
   await runDocker(["pull", image]);
   if (postgresTlsAssets) {
@@ -197,7 +198,19 @@ async function waitForDatabase(service: Service, dbType: string, envMap: Map<str
   }
 
   if (dbType === "redis") {
-    await retryReadiness("Redis", () => runDockerExec(containerName, ["redis-cli", "-h", "127.0.0.1", "-p", String(service.internalPort), "PING"]));
+    const password = envMap.get("REDIS_PASSWORD") || "";
+    await retryReadiness("Redis", () =>
+      runDockerExec(containerName, [
+        "redis-cli",
+        "--no-auth-warning",
+        "-h",
+        "127.0.0.1",
+        "-p",
+        String(service.internalPort),
+        ...(password ? ["-a", password] : []),
+        "PING"
+      ])
+    );
   }
 }
 
