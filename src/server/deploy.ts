@@ -1150,7 +1150,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
         "docker",
         dockerBuildArgs(imageTag, dockerfileDetection.dockerfilePath, buildEnv, appDir),
         deployment.id,
-        { env: { DOCKER_BUILDKIT: "1" }, redact: secrets }
+        { env: { DOCKER_BUILDKIT: "0" }, redact: secrets }
       );
     } else {
       const savedInstallCommand = service.installCommand ?? "";

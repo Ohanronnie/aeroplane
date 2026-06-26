@@ -91,7 +91,7 @@ export function detectDockerfileBuild(options: {
 }
 
 export function dockerBuildArgs(imageTag: string, dockerfilePath: string, buildEnv: Record<string, string>, contextDir: string) {
-  const args = ["build", "--tag", imageTag, "--file", dockerfilePath, "--progress", "plain"];
+  const args = ["build", "--tag", imageTag, "--file", dockerfilePath];
   // Match Railway: service variables are offered as build args, but only
   // take effect when the Dockerfile declares a matching ARG.
   for (const [key, value] of Object.entries(buildEnv)) {
