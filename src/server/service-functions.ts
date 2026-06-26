@@ -332,7 +332,9 @@ export function getServiceFunctionSource(serviceId: string) {
   if (source) return publicFunctionSource(source);
 
   const service = db.select().from(services).where(eq(services.id, serviceId)).get();
-  const runtime = service ? functionRuntimeForService(service) : null;
+  if (!service) return null;
+
+  const runtime = functionRuntimeForService(service);
   if (!runtime) return null;
 
   return {
