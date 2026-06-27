@@ -29,6 +29,7 @@ import { getRailwayProjects, getRailwayProjectDetails, importRailwayProject } fr
 import { startRailwayImportAutomation } from "./railway-import-automation.js";
 import { githubConnectionStatus, listConnectedRepos, listRepoBranches, listRepoDirectories, repoUrlFromFullName } from "./github-connect.js";
 import { branchFromGitRef, verifyGitHubSignature } from "./github.js";
+import { rateLimit } from "./rate-limit.js";
 import { subscribeToDeploymentLogs } from "./logBus.js";
 import {
   buildDatabaseConnectionUrl,
@@ -1304,7 +1305,7 @@ async function applyOnboardingSettings(input: z.infer<typeof restartOnboardingSc
 
 app.get("/api/auth/status", (c) => c.json(publicAuthStatus(c)));
 
-app.post("/api/auth/setup", async (c) => {
+app.post("/api/auth/setup", rateLimit, async (c) => {
   if (hasAuthUsers()) {
     return jsonError("Aeroplane has already been set up", 409);
   }
@@ -1326,7 +1327,7 @@ app.post("/api/auth/setup", async (c) => {
   return c.json({ ok: true, user: publicUser(user), envPath, restartRequired: true }, 201);
 });
 
-app.post("/api/auth/migration/import", async (c) => {
+app.post("/api/auth/migration/import", rateLimit, async (c) => {
   if (hasAuthUsers()) {
     return jsonError("Aeroplane has already been set up", 409);
   }
@@ -1354,7 +1355,7 @@ app.post("/api/auth/migration/import", async (c) => {
   }
 });
 
-app.post("/api/auth/login", async (c) => {
+app.post("/api/auth/login", rateLimit, async (c) => {
   if (!hasAuthUsers()) {
     return jsonError("Setup required", 401);
   }
