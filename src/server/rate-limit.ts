@@ -2,15 +2,49 @@ import type { Context, Next } from "hono";
 
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 60_000;
+const MAX_BUCKETS = 10_000;
 
-const buckets = new Map<string, { count: number; resetAt: number }>();
+type Bucket = { count: number; resetAt: number };
+
+const buckets = new Map<string, Bucket>();
+let lastPruneAt = 0;
+
+function pruneBuckets(now: number) {
+  if (now - lastPruneAt < WINDOW_MS && buckets.size < MAX_BUCKETS) return;
+  lastPruneAt = now;
+
+  for (const [ip, bucket] of buckets) {
+    if (bucket.resetAt <= now) buckets.delete(ip);
+  }
+
+  if (buckets.size <= MAX_BUCKETS) return;
+
+  const excess = buckets.size - MAX_BUCKETS;
+  const oldest = [...buckets.entries()]
+    .sort((a, b) => a[1].resetAt - b[1].resetAt)
+    .slice(0, excess);
+
+  for (const [ip] of oldest) {
+    buckets.delete(ip);
+  }
+}
+
+function clientIp(c: Context) {
+  const forwardedFor = c.req.header("x-forwarded-for");
+  if (forwardedFor) {
+    const forwardedChain = forwardedFor.split(",").map((part) => part.trim()).filter(Boolean);
+    const proxyReportedIp = forwardedChain.at(-1);
+    if (proxyReportedIp) return proxyReportedIp;
+  }
+
+  return c.req.header("x-real-ip")?.trim() || "unknown";
+}
 
 export function rateLimit(c: Context, next: Next) {
-  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
-    ?? c.req.header("x-real-ip")
-    ?? "127.0.0.1";
-
+  const ip = clientIp(c);
   const now = Date.now();
+  pruneBuckets(now);
+
   let bucket = buckets.get(ip);
 
   if (!bucket || bucket.resetAt <= now) {
