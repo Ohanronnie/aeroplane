@@ -27,7 +27,7 @@ import { envExampleVariableSuggestions } from "./env-example-suggestions.js";
 import { resolveServiceEnv } from "./variable-resolver.js";
 import { getRailwayProjects, getRailwayProjectDetails, importRailwayProject } from "./railway-importer.js";
 import { startRailwayImportAutomation } from "./railway-import-automation.js";
-import { githubConnectionStatus, listConnectedRepos, listRepoBranches, listRepoDirectories, repoUrlFromFullName } from "./github-connect.js";
+import { buildGitHubAppManifest, convertGitHubManifestCode, githubConnectionStatus, listConnectedRepos, listRepoBranches, listRepoDirectories, repoUrlFromFullName } from "./github-connect.js";
 import { branchFromGitRef, verifyGitHubSignature } from "./github.js";
 import { rateLimit } from "./rate-limit.js";
 import { subscribeToDeploymentLogs } from "./logBus.js";
@@ -1412,6 +1412,139 @@ app.get("/api/assets/framework-icons/:file", async (c) => {
       "Content-Type": asset.contentType
     }
   });
+});
+
+// --- GitHub App Manifest (one-click connect) ---
+// Registered before requireAuth so the flow works during first-run onboarding
+// (no users yet). Post-setup access is gated to the owner inside each handler.
+type GitHubManifestState = { expiresAt: number; redirectTo: string };
+const githubManifestStates = new Map<string, GitHubManifestState>();
+const githubManifestStateTtl = 15 * 60 * 1000;
+const githubManifestStateLimit = 500;
+
+function requestBaseUrl(c: Context) {
+  const requestUrl = new URL(c.req.url);
+  const host = c.req.header("x-forwarded-host") ?? c.req.header("host") ?? requestUrl.host;
+  const proto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim() || requestUrl.protocol.replace(":", "");
+  return `${proto}://${host}`;
+}
+
+function createGitHubManifestState(redirectTo: string) {
+  const now = Date.now();
+  for (const [key, value] of githubManifestStates) {
+    if (value.expiresAt <= now) githubManifestStates.delete(key);
+  }
+  while (githubManifestStates.size >= githubManifestStateLimit) {
+    const oldestState = githubManifestStates.keys().next().value;
+    if (!oldestState) break;
+    githubManifestStates.delete(oldestState);
+  }
+  const state = randomBytes(24).toString("hex");
+  githubManifestStates.set(state, { expiresAt: now + githubManifestStateTtl, redirectTo });
+  return state;
+}
+
+function consumeGitHubManifestState(state: string) {
+  const entry = githubManifestStates.get(state);
+  if (!entry) return null;
+  githubManifestStates.delete(state);
+  if (entry.expiresAt <= Date.now()) return null;
+  return entry;
+}
+
+function defaultGitHubAppName(baseUrl: string) {
+  let hostSlug = "";
+  try {
+    hostSlug = new URL(baseUrl).hostname.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+  } catch {
+    hostSlug = "";
+  }
+  const stem = hostSlug && hostSlug !== "localhost" ? `aeroplane-${hostSlug}` : "aeroplane";
+  return `${stem}-${randomBytes(3).toString("hex")}`.slice(0, 34);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] ?? ch);
+}
+
+function renderManifestCallbackPage(ok: boolean, message: string) {
+  const payload = JSON.stringify({ source: "aeroplane-github-manifest", ok, message }).replace(/</g, "\\u003c");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>GitHub connection</title></head>
+<body style="font-family:ui-monospace,SFMono-Regular,monospace;background:#09090b;color:#e4e4e7;display:grid;place-items:center;height:100vh;margin:0">
+<div style="text-align:center;max-width:32rem;padding:1.5rem">
+<p style="font-weight:600;color:${ok ? "#34d399" : "#fb7185"}">${ok ? "&#10003; Connected" : "&#10007; Connection failed"}</p>
+<p style="color:#a1a1aa">${escapeHtml(message)}</p>
+</div>
+<script>
+(function(){
+  try { if (window.opener) window.opener.postMessage(${payload}, window.location.origin); } catch (e) {}
+  setTimeout(function(){ try { window.close(); } catch (e) {} }, ${ok ? 800 : 4000});
+})();
+</script>
+</body></html>`;
+}
+
+function canUseGitHubManifest(c: Context) {
+  if (!hasAuthUsers()) return true;
+  return getCurrentUser(c)?.role === "owner";
+}
+
+app.post("/api/github/manifest", async (c) => {
+  if (!canUseGitHubManifest(c)) {
+    return jsonError("Only the owner can connect GitHub", 403);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { organization?: unknown; redirectTo?: unknown };
+  const redirectTo = body.redirectTo === "onboarding" ? "onboarding" : "settings";
+  const organization = typeof body.organization === "string" ? body.organization.trim() : "";
+  const baseUrl = requestBaseUrl(c);
+  const state = createGitHubManifestState(redirectTo);
+  const manifest = buildGitHubAppManifest({ baseUrl, name: defaultGitHubAppName(baseUrl) });
+  const postUrl = organization
+    ? `https://github.com/organizations/${encodeURIComponent(organization)}/settings/apps/new?state=${state}`
+    : `https://github.com/settings/apps/new?state=${state}`;
+
+  return c.json({ postUrl, manifest: JSON.stringify(manifest) });
+});
+
+app.get("/api/github/manifest/callback", async (c) => {
+  const code = c.req.query("code") ?? "";
+  const state = c.req.query("state") ?? "";
+  const entry = state ? consumeGitHubManifestState(state) : null;
+
+  if (!entry) {
+    return c.html(renderManifestCallbackPage(false, "This GitHub connection link has expired. Please start again."));
+  }
+  if (!canUseGitHubManifest(c)) {
+    return c.html(renderManifestCallbackPage(false, "Only the owner can connect GitHub."));
+  }
+  if (!code) {
+    return c.html(renderManifestCallbackPage(false, "GitHub did not return an authorization code."));
+  }
+
+  try {
+    const credentials = await convertGitHubManifestCode(code);
+    const existing = currentGithubEnv();
+    const next = {
+      githubAccessToken: existing.githubAccessToken,
+      githubAppId: credentials.appId,
+      githubAppClientId: credentials.clientId,
+      githubAppSlug: credentials.slug,
+      githubAppPrivateKey: credentials.privateKey,
+      githubWebhookSecret: credentials.webhookSecret
+    };
+    writeManagedEnvPatch({
+      GITHUB_APP_ID: next.githubAppId,
+      GITHUB_APP_CLIENT_ID: next.githubAppClientId,
+      GITHUB_APP_SLUG: next.githubAppSlug,
+      GITHUB_APP_PRIVATE_KEY: next.githubAppPrivateKey,
+      GITHUB_WEBHOOK_SECRET: next.githubWebhookSecret
+    });
+    updateGithubRuntimeEnv(next);
+    return c.html(renderManifestCallbackPage(true, "GitHub App created and connected. You can close this window."));
+  } catch (error) {
+    return c.html(renderManifestCallbackPage(false, error instanceof Error ? error.message : "Could not complete GitHub connection."));
+  }
 });
 
 app.use("/api/*", requireAuth);
