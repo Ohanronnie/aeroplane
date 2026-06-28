@@ -14,7 +14,7 @@ import { getCloneTokenForRepo } from "./github-connect.js";
 import { resolveServiceEnv } from "./variable-resolver.js";
 import { databaseTypeForService, isDatabaseService } from "./database-urls.js";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
-import { databaseDataVolumeArg } from "./database-runtime.js";
+import { databaseContainerCommandArgs, databaseDataVolumeArg } from "./database-runtime.js";
 import { databaseImageForService } from "./database-source-image.js";
 import { ensureStableDatabaseDataVolume } from "./database-volume-adoption.js";
 import { ensureDefaultDomainForService } from "./service-domains.js";
@@ -35,6 +35,8 @@ import { detectDockerfileBuild, dockerBuildArgs } from "./dockerfile-build.js";
 import { dockerImageForService, isDockerImageService } from "../shared/service-source.js";
 import { ensurePostgresLogicalReplication } from "./postgres-logical-replication.js";
 import { isWorkerService } from "../shared/service-runtime.js";
+import { isFunctionService } from "../shared/service-functions.js";
+import { functionRuntimeLabel, writeFunctionDeploymentProject } from "./service-functions.js";
 
 type RunOptions = {
   cwd?: string;
@@ -736,6 +738,7 @@ export function enqueueDeployment(serviceId: string, options: EnqueueOptions) {
 async function runDeployment(deployment: Deployment, service: Service) {
   const startedAt = now();
   const isDatabase = isDatabaseService(service);
+  const isFunction = isFunctionService(service);
   const containerName = containerNameForService(service.id);
   const env = getEnvForService(service.id);
   const runtimePort = runtimePortForService(service, env);
@@ -842,6 +845,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
       if (postgresTlsAssets) {
         dockerArgs.push(...postgresTlsServerArgs());
       }
+      dockerArgs.push(...databaseContainerCommandArgs(dbType, env));
 
       appendDeploymentLog(deployment.id, `Running container mapping ${bindHost}:${service.hostPort} to internal port ${service.internalPort}...`);
       await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
@@ -1089,7 +1093,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
 
   try {
     if (config.deployDryRun) {
-      appendDeploymentLog(deployment.id, "Dry-run mode is enabled. Skipping clone, Railpack build, and Docker run.");
+      appendDeploymentLog(deployment.id, isFunction ? "Dry-run mode is enabled. Skipping function source generation, Docker build, and Docker run." : "Dry-run mode is enabled. Skipping clone, Railpack build, and Docker run.");
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 800));
       const deployedAt = now();
       const isWorker = isWorkerService(service);
@@ -1108,17 +1112,22 @@ async function runDeployment(deployment: Deployment, service: Service) {
       return;
     }
 
-    const authToken = await cloneAuthTokenForService(service);
-    if (authToken) {
-      secrets.push(authToken);
-    }
-    const cloneUrl = cloneUrlWithToken(service.repoUrl, authToken);
-    await runCommand("git", ["clone", "--depth", "1", "--branch", service.branch, cloneUrl, sourceDir], deployment.id, {
-      redact: secrets
-    });
+    if (isFunction) {
+      const functionSource = writeFunctionDeploymentProject(service.id, sourceDir);
+      appendDeploymentLog(deployment.id, `Generated ${functionRuntimeLabel(functionSource.runtime)} function runtime project from saved source.`);
+    } else {
+      const authToken = await cloneAuthTokenForService(service);
+      if (authToken) {
+        secrets.push(authToken);
+      }
+      const cloneUrl = cloneUrlWithToken(service.repoUrl, authToken);
+      await runCommand("git", ["clone", "--depth", "1", "--branch", service.branch, cloneUrl, sourceDir], deployment.id, {
+        redact: secrets
+      });
 
-    if (deployment.commitSha) {
-      await runCommand("git", ["checkout", deployment.commitSha], deployment.id, { cwd: sourceDir });
+      if (deployment.commitSha) {
+        await runCommand("git", ["checkout", deployment.commitSha], deployment.id, { cwd: sourceDir });
+      }
     }
 
     const isStaticService = Boolean(service.staticOutput?.trim());
@@ -1151,7 +1160,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
         "docker",
         dockerBuildArgs(imageTag, dockerfileDetection.dockerfilePath, buildEnv, appDir),
         deployment.id,
-        { env: { DOCKER_BUILDKIT: "1" }, redact: secrets }
+        { env: { DOCKER_BUILDKIT: "0" }, redact: secrets }
       );
     } else {
       const savedInstallCommand = service.installCommand ?? "";

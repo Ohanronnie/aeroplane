@@ -1,7 +1,7 @@
-import { ArrowLeft01Icon, CloudServerIcon, GithubIcon, PackageIcon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon, CloudServerIcon, FunctionIcon, GithubIcon, PackageIcon } from "@hugeicons/core-free-icons";
 import { AppIcon } from "../ui/primitives";
 
-type ServiceType = "git" | "database" | "docker-image";
+export type ServiceType = "git" | "database" | "docker-image" | "function";
 
 type ServiceTypeOption = {
   key: ServiceType;
@@ -24,6 +24,11 @@ const SERVICE_TYPE_OPTIONS: ServiceTypeOption[] = [
     key: "docker-image",
     name: "Docker Image",
     icon: PackageIcon
+  },
+  {
+    key: "function",
+    name: "Function",
+    icon: FunctionIcon
   }
 ];
 

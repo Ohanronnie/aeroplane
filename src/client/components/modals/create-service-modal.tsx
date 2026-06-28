@@ -6,6 +6,7 @@ import {
   Delete02Icon,
   FolderCodeIcon,
   FolderOpenIcon,
+  FunctionIcon,
   GitBranchIcon,
   GithubIcon,
   Globe02Icon,
@@ -47,10 +48,11 @@ import { DirectoryTree } from "./directory-tree";
 import { SourcePickerModal } from "./source-picker";
 import type { ServiceFormPayload } from "../../features/services/service-form-types";
 import { RuntimeModeControl } from "../ui/runtime-mode-control";
-import { ImportTypeStep } from "./import-type-step";
+import { ImportTypeStep, type ServiceType } from "./import-type-step";
 import { DatabaseSelectStep } from "./database-select-step";
 import { DatabaseConfigureStep } from "./database-configure-step";
 import { DockerImageConfigureStep } from "./docker-image-configure-step";
+import { FunctionConfigureStep } from "./function-configure-step";
 import type { DatabaseType } from "./database-service-options";
 import {
   EnvironmentVariableSuggestions,
@@ -116,8 +118,8 @@ export function CreateServiceModal({
   onClose: () => void;
   onCreate: (payload: ServiceFormPayload) => Promise<void>;
 }) {
-  const [step, setStep] = useState<"type" | "repo" | "directory" | "configure" | "database-select" | "database-configure" | "docker-image-configure">("type");
-  const [serviceType, setServiceType] = useState<"git" | "database" | "docker-image" | null>(null);
+  const [step, setStep] = useState<"type" | "repo" | "directory" | "configure" | "database-select" | "database-configure" | "docker-image-configure" | "function-configure">("type");
+  const [serviceType, setServiceType] = useState<ServiceType | null>(null);
   const [gitSourceMode, setGitSourceMode] = useState<GitSourceMode>("github");
   const [selectedDbType, setSelectedDbType] = useState<DatabaseType>("postgres");
 
@@ -538,6 +540,19 @@ export function CreateServiceModal({
     }
   }
 
+  async function handleFunctionSubmit(payload: ServiceFormPayload) {
+    setBusy(true);
+    setError("");
+    try {
+      await onCreate(payload);
+      onClose();
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Could not create function service");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const currentDirectory = form.rootDir || "";
   const isUrlSource = serviceType === "git" && gitSourceMode === "url";
   const gitUrlValid = isGitUrl(form.repoUrl ?? "");
@@ -549,6 +564,8 @@ export function CreateServiceModal({
       ] as const)
     : serviceType === "docker-image"
     ? ([{ key: "docker-image-configure", label: "Docker Image" }] as const)
+    : serviceType === "function"
+    ? ([{ key: "function-configure", label: "Function" }] as const)
     : isUrlSource
     ? ([
         { key: "repo", label: "Git URL" },
@@ -563,6 +580,8 @@ export function CreateServiceModal({
   const stepIndex = serviceType === "database"
     ? step === "database-select" ? 0 : 1
     : serviceType === "docker-image"
+    ? 0
+    : serviceType === "function"
     ? 0
     : isUrlSource
     ? step === "repo" ? 0 : 1
@@ -620,6 +639,8 @@ export function CreateServiceModal({
       ? Settings01Icon
       : step === "docker-image-configure"
       ? PackageIcon
+      : step === "function-configure"
+      ? FunctionIcon
       : step === "repo"
       ? GithubIcon
       : step === "directory"
@@ -635,6 +656,8 @@ export function CreateServiceModal({
       ? "Configure Database"
       : step === "docker-image-configure"
       ? "Configure Docker Image"
+      : step === "function-configure"
+      ? "Configure Function"
       : step === "repo"
       ? "Import Git Repository"
       : step === "directory"
@@ -649,6 +672,8 @@ export function CreateServiceModal({
         ? "Step 1 of 2"
         : "Step 2 of 2"
       : serviceType === "docker-image"
+      ? "Step 1 of 1"
+      : serviceType === "function"
       ? "Step 1 of 1"
       : isUrlSource
       ? step === "repo"
@@ -727,6 +752,8 @@ export function CreateServiceModal({
               setStep("repo");
             } else if (type === "docker-image") {
               setStep("docker-image-configure");
+            } else if (type === "function") {
+              setStep("function-configure");
             } else {
               setStep("database-select");
             }
@@ -757,6 +784,15 @@ export function CreateServiceModal({
             setStep("type");
           }}
           onSubmit={handleDockerImageSubmit}
+          busy={busy}
+        />
+      ) : step === "function-configure" ? (
+        <FunctionConfigureStep
+          onBack={() => {
+            setServiceType(null);
+            setStep("type");
+          }}
+          onSubmit={handleFunctionSubmit}
           busy={busy}
         />
       ) : step === "repo" ? (

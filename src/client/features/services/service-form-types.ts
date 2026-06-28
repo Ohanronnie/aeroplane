@@ -1,7 +1,11 @@
+import type { FunctionRuntime } from "../../../shared/service-functions";
+
 export type ServiceFormPayload = {
   name: string;
   repoFullName?: string | null;
   repoUrl?: string;
+  functionRuntime?: FunctionRuntime;
+  sourceCode?: string;
   branch: string;
   rootDir?: string;
   dockerImage?: string;

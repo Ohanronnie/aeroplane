@@ -138,6 +138,14 @@ export const serviceImportSources = sqliteTable("service_import_sources", {
   updatedAt: text("updated_at").notNull()
 });
 
+export const serviceFunctions = sqliteTable("service_functions", {
+  serviceId: text("project_id").primaryKey(),
+  runtime: text("runtime").notNull(),
+  sourceCode: text("source_code").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull()
+});
+
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -193,6 +201,7 @@ export type Domain = typeof domains.$inferSelect;
 export type DatabaseBackup = typeof databaseBackups.$inferSelect;
 export type DatabaseBackupSettings = typeof databaseBackupSettings.$inferSelect;
 export type DatabaseDataImport = typeof databaseDataImports.$inferSelect;
+export type ServiceFunction = typeof serviceFunctions.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type AuthSession = typeof authSessions.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;

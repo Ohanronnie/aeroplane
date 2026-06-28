@@ -402,6 +402,102 @@ async function getAppInstallationCount() {
   return installations.length;
 }
 
+type GitHubManifestConversion = {
+  id: number;
+  slug: string;
+  client_id: string;
+  client_secret: null | string;
+  webhook_secret: null | string;
+  pem: string;
+  html_url: string;
+  owner: { login: string };
+};
+
+export type GitHubAppCredentials = {
+  appId: string;
+  slug: string;
+  clientId: string;
+  clientSecret: string;
+  webhookSecret: string;
+  privateKey: string;
+  htmlUrl: string;
+  owner: string;
+};
+
+function isPublicWebhookHost(baseUrl: string) {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    return !(
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".localhost") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function buildGitHubAppManifest(options: { baseUrl: string; name: string }) {
+  const base = options.baseUrl.replace(/\/+$/, "");
+  const manifest = {
+    name: options.name,
+    url: base,
+    redirect_url: `${base}/api/github/manifest/callback`,
+    public: false,
+    default_permissions: {
+      contents: "read",
+      metadata: "read",
+      pull_requests: "read"
+    }
+  };
+
+  if (!isPublicWebhookHost(base)) return manifest;
+
+  return {
+    ...manifest,
+    hook_attributes: {
+      url: `${base}/api/github/app/webhook`,
+      active: true
+    },
+    default_events: ["push"]
+  };
+}
+
+// Exchanges the temporary code GitHub sends back after an App Manifest creation for
+// the full set of App credentials. This endpoint takes no authentication — the
+// single-use code is the credential.
+export async function convertGitHubManifestCode(code: string): Promise<GitHubAppCredentials> {
+  const response = await fetch(`https://api.github.com/app-manifests/${encodeURIComponent(code)}/conversions`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "aeroplane-control-plane",
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`GitHub manifest conversion failed (${response.status}): ${body || response.statusText}`);
+  }
+
+  const data = (await response.json()) as GitHubManifestConversion;
+  return {
+    appId: String(data.id),
+    slug: data.slug,
+    clientId: data.client_id,
+    clientSecret: data.client_secret ?? "",
+    webhookSecret: data.webhook_secret ?? "",
+    privateKey: data.pem ?? "",
+    htmlUrl: data.html_url,
+    owner: data.owner?.login ?? ""
+  };
+}
+
 export async function githubConnectionStatus(): Promise<GitHubStatus> {
   if (hasGitHubAppConfig()) {
     const installationCount = await getAppInstallationCount();

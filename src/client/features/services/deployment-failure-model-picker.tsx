@@ -18,12 +18,14 @@ export function DeploymentFailureModelPicker({
   selectedProviderId,
   selectedModel,
   disabled = false,
+  menuAlign = "left",
   onSelect
 }: {
   providers: AiProviderStatus[];
   selectedProviderId: AiProviderId | "";
   selectedModel: string;
   disabled?: boolean;
+  menuAlign?: "left" | "right";
   onSelect: (providerId: AiProviderId, modelId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -74,7 +76,11 @@ export function DeploymentFailureModelPicker({
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-full z-50 mt-2 flex w-[560px] max-w-[calc(100vw-4rem)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-[0_24px_80px_rgba(0,0,0,0.5)]">
+        <div
+          className={`absolute top-full z-50 mt-2 flex w-[560px] max-w-[calc(100vw-4rem)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-[0_24px_80px_rgba(0,0,0,0.5)] ${
+            menuAlign === "right" ? "right-0" : "left-0"
+          }`}
+        >
           <div className="flex w-16 shrink-0 flex-col items-center border-r border-zinc-800 bg-zinc-950/95 py-2">
             {providerLogos.map(({ provider, logo }) => {
               const active = provider.id === activeProvider?.id;
