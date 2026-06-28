@@ -5,7 +5,7 @@ import { serviceImportSources, type ServiceImportSource } from "./schema.js";
 
 type RecordServiceImportSourceInput = {
   serviceId: string;
-  provider: "railway";
+  provider: "railway" | "vercel";
   externalProjectId?: string | null;
   externalEnvironmentId?: string | null;
   externalServiceId: string;

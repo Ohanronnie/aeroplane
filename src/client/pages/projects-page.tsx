@@ -18,6 +18,7 @@ import { ServiceCluster } from "../features/projects/service-cluster";
 import { SystemHealthPill } from "../features/projects/system-health-pill";
 import { SetupTodoList } from "../features/projects/setup-todo-list";
 import { RailwayImportModal } from "../features/integrations/railway-import-modal";
+import { VercelImportModal } from "../features/integrations/vercel-import-modal";
 import type { SystemSettingsTab } from "../components/modals/system-settings-types";
 import { SignOutButton } from "../components/auth/sign-out-button";
 import { serviceIsDeploying } from "../lib/deployment-status";
@@ -38,6 +39,7 @@ export function ProjectsPage() {
   const [setupLoading, setSetupLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [railwayImportOpen, setRailwayImportOpen] = useState(false);
+  const [vercelImportOpen, setVercelImportOpen] = useState(false);
   const [githubInstallOpen, setGitHubInstallOpen] = useState(false);
   const [error, setError] = useState("");
 
@@ -202,7 +204,16 @@ export function ProjectsPage() {
               >
                 <AppIcon icon={AddSquareIcon} size={14} />
                 <span className="hidden md:inline">Import Railway</span>
-                <span className="md:hidden">Import</span>
+                <span className="md:hidden">Railway</span>
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center gap-2 border border-zinc-100/40 bg-zinc-100/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-100 transition-colors hover:bg-zinc-100/20"
+                onClick={() => setVercelImportOpen(true)}
+              >
+                <AppIcon icon={AddSquareIcon} size={14} />
+                <span className="hidden md:inline">Import Vercel</span>
+                <span className="md:hidden">Vercel</span>
               </button>
               <button
                 type="button"
@@ -314,6 +325,11 @@ export function ProjectsPage() {
       <RailwayImportModal
         open={railwayImportOpen}
         onClose={() => setRailwayImportOpen(false)}
+        onSuccess={loadProjects}
+      />
+      <VercelImportModal
+        open={vercelImportOpen}
+        onClose={() => setVercelImportOpen(false)}
         onSuccess={loadProjects}
       />
       <GitHubInstallModal

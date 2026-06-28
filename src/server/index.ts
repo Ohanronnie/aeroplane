@@ -27,6 +27,7 @@ import { envExampleVariableSuggestions } from "./env-example-suggestions.js";
 import { resolveServiceEnv } from "./variable-resolver.js";
 import { getRailwayProjects, getRailwayProjectDetails, importRailwayProject } from "./railway-importer.js";
 import { startRailwayImportAutomation } from "./railway-import-automation.js";
+import { getVercelTeams, getVercelProjects, getVercelProjectDetails, importVercelProject } from "./vercel-importer.js";
 import { buildGitHubAppManifest, convertGitHubManifestCode, githubConnectionStatus, listConnectedRepos, listRepoBranches, listRepoDirectories, repoUrlFromFullName } from "./github-connect.js";
 import { branchFromGitRef, verifyGitHubSignature } from "./github.js";
 import { rateLimit } from "./rate-limit.js";
@@ -3467,6 +3468,89 @@ app.post("/api/integrations/railway/import", async (c) => {
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Failed to import Railway project";
+    return jsonError(msg);
+  }
+});
+
+app.post("/api/integrations/vercel/teams", async (c) => {
+  try {
+    const body = await c.req.json();
+    const token = body?.apiToken;
+    if (!token) {
+      return jsonError("API Token is required");
+    }
+    const teams = await getVercelTeams(token);
+    return c.json({ teams });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to load Vercel teams";
+    return jsonError(msg);
+  }
+});
+
+app.post("/api/integrations/vercel/projects", async (c) => {
+  try {
+    const body = await c.req.json();
+    const token = body?.apiToken;
+    if (!token) {
+      return jsonError("API Token is required");
+    }
+    const teamId = optionalString.parse(body?.teamId);
+    const projects = await getVercelProjects(token, teamId);
+    return c.json({ projects });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to load Vercel projects";
+    return jsonError(msg);
+  }
+});
+
+app.post("/api/integrations/vercel/project-details", async (c) => {
+  try {
+    const body = await c.req.json();
+    const token = body?.apiToken;
+    const projectId = body?.projectId;
+    if (!token || !projectId) {
+      return jsonError("API Token and Project ID are required");
+    }
+    const teamId = optionalString.parse(body?.teamId);
+    const details = await getVercelProjectDetails(token, projectId, teamId);
+    return c.json({ details });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to load Vercel project details";
+    return jsonError(msg);
+  }
+});
+
+app.post("/api/integrations/vercel/import", async (c) => {
+  try {
+    const body = await c.req.json();
+    const token = body?.apiToken;
+    const projectId = body?.projectId;
+    const config = body?.config || {};
+    if (!token || !projectId) {
+      return jsonError("API Token and Project ID are required");
+    }
+    const ownerUserId = actorUserId(c);
+    if (!ownerUserId) {
+      return jsonError("Authenticated user not found", 401);
+    }
+    const teamId = optionalString.parse(body?.teamId);
+    const result = await importVercelProject(token, projectId, config, { ownerUserId, teamId });
+
+    if (config.autoDeploy !== false) {
+      for (const serviceId of result.appServiceIds) {
+        enqueueDeployment(serviceId, { trigger: "manual" });
+      }
+    }
+
+    return c.json({
+      ok: true,
+      projectSlug: result.projectSlug,
+      importedCustomDomainCount: result.importedCustomDomainCount,
+      importedVariableCount: result.importedVariableCount,
+      skippedSensitiveCount: result.skippedSensitiveCount
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to import Vercel project";
     return jsonError(msg);
   }
 });
