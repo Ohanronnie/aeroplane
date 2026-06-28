@@ -1343,6 +1343,7 @@ app.get("/api/assets/framework-icons/:file", async (c) => {
 type GitHubManifestState = { expiresAt: number; redirectTo: string };
 const githubManifestStates = new Map<string, GitHubManifestState>();
 const githubManifestStateTtl = 15 * 60 * 1000;
+const githubManifestStateLimit = 500;
 
 function requestBaseUrl(c: Context) {
   const requestUrl = new URL(c.req.url);
@@ -1355,6 +1356,11 @@ function createGitHubManifestState(redirectTo: string) {
   const now = Date.now();
   for (const [key, value] of githubManifestStates) {
     if (value.expiresAt <= now) githubManifestStates.delete(key);
+  }
+  while (githubManifestStates.size >= githubManifestStateLimit) {
+    const oldestState = githubManifestStates.keys().next().value;
+    if (!oldestState) break;
+    githubManifestStates.delete(oldestState);
   }
   const state = randomBytes(24).toString("hex");
   githubManifestStates.set(state, { expiresAt: now + githubManifestStateTtl, redirectTo });
@@ -1401,8 +1407,13 @@ function renderManifestCallbackPage(ok: boolean, message: string) {
 </body></html>`;
 }
 
+function canUseGitHubManifest(c: Context) {
+  if (!hasAuthUsers()) return true;
+  return getCurrentUser(c)?.role === "owner";
+}
+
 app.post("/api/github/manifest", async (c) => {
-  if (hasAuthUsers() && !isOwnerSession(c)) {
+  if (!canUseGitHubManifest(c)) {
     return jsonError("Only the owner can connect GitHub", 403);
   }
 
@@ -1427,7 +1438,7 @@ app.get("/api/github/manifest/callback", async (c) => {
   if (!entry) {
     return c.html(renderManifestCallbackPage(false, "This GitHub connection link has expired. Please start again."));
   }
-  if (hasAuthUsers() && !isOwnerSession(c)) {
+  if (!canUseGitHubManifest(c)) {
     return c.html(renderManifestCallbackPage(false, "Only the owner can connect GitHub."));
   }
   if (!code) {

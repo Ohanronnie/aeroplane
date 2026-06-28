@@ -424,21 +424,44 @@ export type GitHubAppCredentials = {
   owner: string;
 };
 
+function isPublicWebhookHost(baseUrl: string) {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    return !(
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.endsWith(".localhost") ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function buildGitHubAppManifest(options: { baseUrl: string; name: string }) {
   const base = options.baseUrl.replace(/\/+$/, "");
-  return {
+  const manifest = {
     name: options.name,
     url: base,
     redirect_url: `${base}/api/github/manifest/callback`,
-    hook_attributes: {
-      url: `${base}/api/github/app/webhook`,
-      active: true
-    },
     public: false,
     default_permissions: {
       contents: "read",
       metadata: "read",
       pull_requests: "read"
+    }
+  };
+
+  if (!isPublicWebhookHost(base)) return manifest;
+
+  return {
+    ...manifest,
+    hook_attributes: {
+      url: `${base}/api/github/app/webhook`,
+      active: true
     },
     default_events: ["push"]
   };
