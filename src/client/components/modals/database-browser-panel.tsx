@@ -10,6 +10,7 @@ import { MongoDocumentList } from "./mongo-document-list";
 import { MongoDocumentModal } from "./mongo-document-modal";
 import { DatabaseImportStatusBanner } from "./database-import-status-banner";
 import { DatabaseRuntimeStatePanel } from "./database-runtime-state-panel";
+import { ConfirmationDialog } from "./confirmation-dialog";
 
 function isPostgresFamilyDatabase(engine: string) {
   return engine === "postgres" || engine === "timescale";
@@ -78,6 +79,7 @@ export function DatabaseBrowserPanel({ serviceId }: { serviceId: string }) {
   const [importOpen, setImportOpen] = useState(false);
   const [dataImports, setDataImports] = useState<DatabaseDataImport[]>([]);
   const [dismissedDataImportIds, setDismissedDataImportIds] = useState<Set<string>>(new Set());
+  const [rowsPendingDelete, setRowsPendingDelete] = useState<DatabaseRow[]>([]);
 
   const columns = rowsResult?.columns ?? [];
   const rows = rowsResult?.rows ?? [];
@@ -92,6 +94,8 @@ export function DatabaseBrowserPanel({ serviceId }: { serviceId: string }) {
     (dataImport.status === "queued" || dataImport.status === "running") && !dismissedDataImportIds.has(dataImport.id)
   )) ?? null;
   const visibleDataImport = activeDataImport ?? (latestDataImport && !dismissedDataImportIds.has(latestDataImport.id) ? latestDataImport : null);
+  const pendingDeleteCount = rowsPendingDelete.length;
+  const pendingDeleteRecordLabel = `${nouns.record}${pendingDeleteCount === 1 ? "" : "s"}`;
 
   const selectedTableName = useMemo(() => {
     return tables.find((table) => table.id === selectedTable)?.name ?? selectedTable;
@@ -237,6 +241,7 @@ export function DatabaseBrowserPanel({ serviceId }: { serviceId: string }) {
     setMongoQuery("");
     setOptionsOpen(false);
     setImportOpen(false);
+    setRowsPendingDelete([]);
     setDataImports([]);
     setDismissedDataImportIds(new Set());
     setPageOffset(0);
@@ -259,6 +264,7 @@ export function DatabaseBrowserPanel({ serviceId }: { serviceId: string }) {
     if (selectedTable) {
       setAppliedFilters([]);
       setMongoQuery("");
+      setRowsPendingDelete([]);
       setPageOffset(0);
       void loadRows(selectedTable, [], 0, pageSize);
     }
@@ -315,20 +321,29 @@ export function DatabaseBrowserPanel({ serviceId }: { serviceId: string }) {
     }
   }
 
-  async function deleteRows(rowsToDelete: DatabaseRow[]) {
-    if (!rowsResult || rowsToDelete.length === 0 || !window.confirm(`Delete ${rowsToDelete.length} selected row${rowsToDelete.length === 1 ? "" : "s"}?`)) return;
+  function requestDeleteRows(rowsToDelete: DatabaseRow[]) {
+    if (!rowsResult || rowsToDelete.length === 0) return;
+    setRowsPendingDelete(rowsToDelete);
+  }
+
+  async function deletePendingRows() {
+    const currentRowsResult = rowsResult;
+    const rowsToDelete = rowsPendingDelete;
+    if (!currentRowsResult || rowsToDelete.length === 0) return;
+
+    setRowsPendingDelete([]);
     setBusy("delete");
     setError("");
     try {
       for (const row of rowsToDelete) {
         await api.deleteDatabaseRow(serviceId, {
-          table: rowsResult.table,
+          table: currentRowsResult.table,
           primaryKey: primaryKeyFor(columns, row)
         });
       }
       const nextOffset = rowsToDelete.length >= rows.length ? Math.max(0, pageOffset - pageSize) : pageOffset;
-      adjustTableRowCount(rowsResult.table, -rowsToDelete.length);
-      await loadRows(rowsResult.table, appliedFilters, nextOffset, pageSize);
+      adjustTableRowCount(currentRowsResult.table, -rowsToDelete.length);
+      await loadRows(currentRowsResult.table, appliedFilters, nextOffset, pageSize);
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "Could not delete selected rows");
     } finally {
@@ -602,7 +617,7 @@ export function DatabaseBrowserPanel({ serviceId }: { serviceId: string }) {
             onAddRecord={openInsertSheet}
             onBeginEdit={beginEdit}
             onCancelEdit={() => setEditingIndex(null)}
-            onDeleteRows={(rowsToDelete) => void deleteRows(rowsToDelete)}
+            onDeleteRows={requestDeleteRows}
             onDraftChange={(column, value) => setDraftRow((current) => ({ ...current, [column]: value }))}
             onApplyFilters={(filters) => {
               setAppliedFilters(filters);
@@ -653,6 +668,16 @@ export function DatabaseBrowserPanel({ serviceId }: { serviceId: string }) {
           serviceId={serviceId}
           onClose={() => setImportOpen(false)}
           onImported={refreshAfterImport}
+        />
+        <ConfirmationDialog
+          open={pendingDeleteCount > 0}
+          title={`Delete ${pendingDeleteCount} selected ${pendingDeleteRecordLabel}?`}
+          subject={selectedTableName}
+          description={`This will permanently remove the selected ${pendingDeleteRecordLabel} from this table.`}
+          confirmLabel={`Delete ${pendingDeleteCount}`}
+          busy={busy === "delete"}
+          onClose={() => setRowsPendingDelete([])}
+          onConfirm={deletePendingRows}
         />
       </section>
     </div>
