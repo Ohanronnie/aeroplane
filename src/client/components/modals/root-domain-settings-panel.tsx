@@ -12,6 +12,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { isWildcardRootDomain, normalizeRootDomain, wildcardRootDomain } from "../../lib/root-domain";
 import { AppIcon, FieldLabel, FormInput, shellButton, statusClass } from "../ui/primitives";
+import { ConfirmationDialog } from "./confirmation-dialog";
 
 function recordNameFor(domain: string) {
   return wildcardRootDomain(domain) || "*.your-domain.com";
@@ -27,6 +28,7 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
   const [verifying, setVerifying] = useState(false);
   const [editingDomain, setEditingDomain] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
@@ -37,7 +39,10 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
   const wildcardHostname = recordNameFor(savedRootDomain || normalizedRootDomain);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setClearDialogOpen(false);
+      return;
+    }
 
     async function loadSettings() {
       setError("");
@@ -118,9 +123,7 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
   }
 
   async function clearRootDomain() {
-    const confirmed = window.confirm("Remove the root domain from Aeroplane?");
-    if (!confirmed) return;
-
+    setClearDialogOpen(false);
     setSaving(true);
     setError("");
     setSuccess("");
@@ -248,7 +251,7 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
                 <button
                   type="button"
                   className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-rose-500/45 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-55"
-                  onClick={() => void clearRootDomain()}
+                  onClick={() => setClearDialogOpen(true)}
                   disabled={saving}
                   title="Delete root domain"
                   aria-label="Delete root domain"
@@ -323,6 +326,17 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
           {success}
         </div>
       ) : null}
+
+      <ConfirmationDialog
+        open={clearDialogOpen}
+        title="Remove root domain?"
+        subject={wildcardRootDomain(savedRootDomain)}
+        description="Aeroplane will stop generating service URLs from this wildcard root domain. Existing routing may stop working until another domain is configured."
+        confirmLabel="Remove domain"
+        busy={saving}
+        onClose={() => setClearDialogOpen(false)}
+        onConfirm={clearRootDomain}
+      />
     </div>
   );
 }
