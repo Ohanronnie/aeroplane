@@ -38,6 +38,7 @@ import { githubBranchesCache, githubDirectoriesCache, githubReposCache } from ".
 import { DirectoryPickerModal } from "../../components/modals/directory-picker";
 import { SourcePickerModal } from "../../components/modals/source-picker";
 import { TransferServiceModal } from "../../components/modals/transfer-service-modal";
+import { ConfirmationDialog } from "../../components/modals/confirmation-dialog";
 import { DatabaseServiceSettingsPanel } from "../../components/modals/database-service-settings-panel";
 import { DockerImageServiceSettingsPanel } from "../../components/modals/docker-image-service-settings-panel";
 import { FunctionServiceSettingsPanel } from "../../components/modals/function-service-settings-panel";
@@ -185,6 +186,7 @@ export function ServicePageShell({
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceRepos, setSourceRepos] = useState<GitHubRepo[]>([]);
   const [sourceLoading, setSourceLoading] = useState(false);
@@ -243,6 +245,7 @@ export function ServicePageShell({
 
   useEffect(() => {
     settingsServiceIdRef.current = null;
+    setDeleteDialogOpen(false);
     void loadOverview();
     void loadSuggestionKeys();
   }, [loadOverview, loadSuggestionKeys, serviceId]);
@@ -579,7 +582,9 @@ export function ServicePageShell({
   }
 
   async function deleteService() {
-    if (!overview?.service || !window.confirm(`Delete service "${overview.service.name}"?`)) return;
+    if (!overview?.service) return;
+
+    setDeleteDialogOpen(false);
     setBusy("delete");
     try {
       await api.deleteService(serviceId);
@@ -988,7 +993,7 @@ export function ServicePageShell({
                         <AppIcon icon={FolderOpenIcon} size={16} />
                         Move service
                       </button>
-                      <button type="button" className={shellButton("danger")} onClick={() => void deleteService()} disabled={busy === "delete"}>
+                      <button type="button" className={shellButton("danger")} onClick={() => setDeleteDialogOpen(true)} disabled={busy === "delete"}>
                         <AppIcon icon={Delete02Icon} size={16} />
                         Delete service
                       </button>
@@ -1048,6 +1053,16 @@ export function ServicePageShell({
         busy={busy === "transfer"}
         onClose={() => setTransferOpen(false)}
         onTransfer={transferService}
+      />
+      <ConfirmationDialog
+        open={deleteDialogOpen && Boolean(service)}
+        title="Delete service?"
+        subject={service?.name}
+        description="This will permanently remove the service, its deployments, variables, domains, and related runtime resources."
+        confirmLabel="Delete service"
+        busy={busy === "delete"}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={deleteService}
       />
       <RedeployRequiredToast
         visible={redeployToastVisible}
