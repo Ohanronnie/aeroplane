@@ -37,6 +37,7 @@ import { ensurePostgresLogicalReplication } from "./postgres-logical-replication
 import { isWorkerService } from "../shared/service-runtime.js";
 import { isFunctionService } from "../shared/service-functions.js";
 import { functionRuntimeLabel, writeFunctionDeploymentProject } from "./service-functions.js";
+import { prepareTanStackStartRuntime } from "./tanstack-start-runtime.js";
 
 type RunOptions = {
   cwd?: string;
@@ -1165,7 +1166,17 @@ async function runDeployment(deployment: Deployment, service: Service) {
     } else {
       const savedInstallCommand = service.installCommand ?? "";
       const buildCommand = service.buildCommand ?? "";
-      const startCommand = service.startCommand ?? "";
+      let startCommand = service.startCommand ?? "";
+      const tanStackStartRuntime = prepareTanStackStartRuntime({
+        appDir,
+        serviceStartCommand: startCommand,
+        isStaticService,
+        isWorker
+      });
+      if (tanStackStartRuntime) {
+        startCommand = tanStackStartRuntime.startCommand;
+        appendDeploymentLog(deployment.id, tanStackStartRuntime.message, "system", secrets);
+      }
       const packageManager = detectPackageManager(sourceDir, [savedInstallCommand, buildCommand, startCommand]);
       const installCommand = savedInstallCommand;
       const hasCommandOverrides = Boolean(installCommand || buildCommand || startCommand);
@@ -1200,7 +1211,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
         appendDeploymentLog(deployment.id, `Using custom build command: ${buildCommand}`, "system", secrets);
       }
       if (startCommand) {
-        appendDeploymentLog(deployment.id, `Using custom start command: ${startCommand}`, "system", secrets);
+        appendDeploymentLog(deployment.id, `${tanStackStartRuntime ? "Using automatic" : "Using custom"} start command: ${startCommand}`, "system", secrets);
       }
 
       if (hasCommandOverrides) {
