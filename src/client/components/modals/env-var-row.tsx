@@ -60,7 +60,7 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!editKey.trim() || !editValue) return;
+    if (!editKey.trim()) return;
     try {
       await onSave(editKey.trim(), editValue);
       setEditing(false);
@@ -130,7 +130,6 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
               suggestions={suggestions}
               placeholder="VALUE"
               autoComplete="off"
-              required
               disabled={busy}
               className="font-mono h-9 text-xs pr-9 focus:border-[#4FB8B2]"
             />

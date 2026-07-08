@@ -125,7 +125,6 @@ export function ServiceVariablesPanel({
                 suggestions={suggestions}
                 placeholder="VALUE"
                 autoComplete="off"
-                required
               />
             </div>
             <div className="flex items-end gap-2">
