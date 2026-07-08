@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
+import { sqlite } from "./db.js";
 
 export type SystemUpdateStatus = "current" | "available" | "diverged" | "unknown";
 export type SystemUpdateRunStatus = "idle" | "running" | "succeeded" | "failed";
@@ -306,6 +307,38 @@ function queueRestart() {
   return true;
 }
 
+function inFlightDeploymentBlocker() {
+  const rows = sqlite
+    .prepare(
+      `
+        SELECT
+          deployments.id AS deploymentId,
+          deployments.status AS deploymentStatus,
+          projects.id AS serviceId,
+          projects.name AS serviceName
+        FROM deployments
+        LEFT JOIN projects ON projects.id = deployments.project_id
+        WHERE deployments.status IN ('queued', 'building')
+        ORDER BY deployments.created_at DESC
+        LIMIT 5
+      `
+    )
+    .all() as Array<{
+    deploymentId: string;
+    deploymentStatus: string;
+    serviceId: string | null;
+    serviceName: string | null;
+  }>;
+
+  if (rows.length === 0) return null;
+
+  const deploymentsLabel = rows
+    .map((row) => `${row.serviceName ?? row.serviceId ?? "unknown service"} (${row.deploymentStatus} ${row.deploymentId})`)
+    .join(", ");
+
+  return `Cannot update while deployments are queued or building: ${deploymentsLabel}. Wait for them to finish or abort them, then retry the update.`;
+}
+
 async function getImageUpdateInfo(checkedAt: string): Promise<SystemUpdateInfo> {
   const currentCommit = imageCurrentCommit();
 
@@ -523,6 +556,20 @@ async function runUpdate() {
 
 export function startSystemUpdate() {
   if (!activeUpdate) {
+    const blocker = inFlightDeploymentBlocker();
+    if (blocker) {
+      activeRun = {
+        status: "failed",
+        startedAt: nowIso(),
+        finishedAt: nowIso(),
+        targetCommit: null,
+        restartQueued: false,
+        logs: [blocker],
+        error: blocker
+      };
+      return snapshotRun();
+    }
+
     activeUpdate = runUpdate().finally(() => {
       activeUpdate = null;
     });
