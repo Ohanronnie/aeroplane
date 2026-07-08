@@ -22,6 +22,8 @@ If the folder does not contain `index.html`, Aeroplane treats it as a failed sta
 
 Leave `Static output` blank when the app should run as a server. Set it only when the deployment should serve files directly.
 
+For TanStack Start SSR apps, leave `Static output` blank. Aeroplane detects TanStack Start source services and starts the server-rendered app instead of exporting `dist/client` as a static site.
+
 For custom commands, Aeroplane expects the static output path to match the output inside the built image. For auto-detected builds, use the framework's output folder.
 
 ## Workers
