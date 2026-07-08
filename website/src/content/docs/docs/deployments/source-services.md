@@ -33,6 +33,8 @@ The root directory matters for monorepos. Choose the folder that contains the ap
 
 After cloning the repository, Aeroplane checks for a `Dockerfile` at the service root. When one exists, the deployment builds it with `docker build` and skips Railpack entirely — the Dockerfile controls how the image is built and started. Otherwise Aeroplane uses Railpack through BuildKit to detect and build the app. Leave install, build, and start commands blank when auto detection is correct.
 
+TanStack Start apps are detected automatically when the service root depends on `@tanstack/react-start` or `@tanstack/start`. If the app has no start command, Aeroplane supplies the correct production start behavior for Nitro output or for the `dist/client` plus `dist/server` fetch-handler output used by TanStack Start server builds.
+
 The build method can be pinned per service in Settings:
 
 - **Auto** (default) — use the Dockerfile when present, otherwise Railpack.
