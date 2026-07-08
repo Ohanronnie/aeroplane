@@ -32,6 +32,7 @@ import { saveRedisDatasetIfRunning, stopRedisContainerForReplacement } from "./r
 import { deploymentConcurrency } from "./system-settings.js";
 import { buildkitStartHint, ensureBuildkitRunning } from "./buildkit.js";
 import { detectDockerfileBuild, dockerBuildArgs } from "./dockerfile-build.js";
+import { removeDeploymentContainer } from "./deployment-container-cleanup.js";
 import { dockerImageForService, isDockerImageService } from "../shared/service-source.js";
 import { ensurePostgresLogicalReplication } from "./postgres-logical-replication.js";
 import { isWorkerService } from "../shared/service-runtime.js";
@@ -373,6 +374,74 @@ function appendCommandOutputLogs(deploymentId: string, output: string, stream: "
     if (line.trim().length > 0) {
       appendDeploymentLog(deploymentId, line, stream, secrets);
     }
+  }
+}
+
+function currentActivePortForService(serviceId: string, fallback: number | null) {
+  const current = db.select({ activePort: services.activePort }).from(services).where(eq(services.id, serviceId)).get();
+  return current ? current.activePort : fallback;
+}
+
+async function rollbackFailedWebRollout({
+  deploymentId,
+  serviceId,
+  previousActivePort,
+  shouldRestoreActivePort,
+  tempContainerName,
+  shouldRemoveTempContainer,
+  secrets
+}: {
+  deploymentId: string;
+  serviceId: string;
+  previousActivePort: number | null;
+  shouldRestoreActivePort: boolean;
+  tempContainerName: string | null;
+  shouldRemoveTempContainer: boolean;
+  secrets: string[];
+}) {
+  if (shouldRestoreActivePort) {
+    try {
+      db.update(services).set({ activePort: previousActivePort, updatedAt: now() }).where(eq(services.id, serviceId)).run();
+      appendDeploymentLog(
+        deploymentId,
+        previousActivePort === null ? "Restored routing to the previous state with no active port." : `Restored routing to previous active port ${previousActivePort}.`,
+        "stderr",
+        secrets
+      );
+      const caddy = await writeAndReloadCaddy();
+      appendDeploymentLog(
+        deploymentId,
+        caddy.ok ? "Caddy config reloaded after failed rollout cleanup." : `Caddy reload after failed rollout cleanup skipped/failed: ${caddy.detail}`,
+        caddy.ok ? "system" : "stderr",
+        secrets
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      appendDeploymentLog(deploymentId, `Failed to restore routing after failed rollout: ${message}`, "stderr", secrets);
+    }
+  }
+
+  if (tempContainerName && shouldRemoveTempContainer) {
+    await removeDeploymentContainer({
+      containerName: tempContainerName,
+      log: (line, stream = "system") => appendDeploymentLog(deploymentId, line, stream, secrets),
+      runBufferedDocker: (args) => runBufferedCommand("docker", args)
+    });
+  }
+}
+
+async function cleanupInterruptedDeploymentContainers(interruptedDeployments: { id: string; serviceId: string; containerName: string | null }[]) {
+  for (const deployment of interruptedDeployments) {
+    const service = getServiceById(deployment.serviceId);
+    if (!service || isDatabaseService(service) || isWorkerService(service)) continue;
+
+    const stableContainerName = deployment.containerName ?? containerNameForService(service.id);
+    const containerName = service.staticOutput?.trim() ? `deploy-export-${safeDockerIdentifier(deployment.id, "export")}` : `${stableContainerName}-${deployment.id}`;
+    await removeDeploymentContainer({
+      containerName,
+      log: (line, stream = "system") => appendDeploymentLog(deployment.id, line, stream),
+      runBufferedDocker: (args) => runBufferedCommand("docker", args)
+    });
   }
 }
 
@@ -886,6 +955,11 @@ async function runDeployment(deployment: Deployment, service: Service) {
   if (isDockerImageService(service)) {
     const imageName = dockerImageForService(service);
     const isWorker = isWorkerService(service);
+    let webTempContainerName: string | null = null;
+    let webTempContainerNeedsCleanup = false;
+    let webTempContainerPromoted = false;
+    let webActivePortChanged = false;
+    let webPreviousActivePort = service.activePort;
     if (!imageName) {
       db.update(deployments)
         .set({ status: "failed", startedAt, finishedAt: now(), containerName })
@@ -992,6 +1066,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
 
       const tempPort = await getEphemeralFreePort();
       const tempContainerName = `${containerName}-${deployment.id}`;
+      webTempContainerName = tempContainerName;
       appendDeploymentLog(deployment.id, `Allocated ephemeral port ${tempPort} for Docker image rollout.`);
 
       const dockerArgs = [
@@ -1011,6 +1086,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
       dockerArgs.push(imageName);
 
       appendDeploymentLog(deployment.id, `Starting Docker image container ${tempContainerName} mapping 127.0.0.1:${tempPort} to internal ${runtimePort}...`);
+      webTempContainerNeedsCleanup = true;
       await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
 
       appendDeploymentLog(deployment.id, `Probing port ${tempPort} for startup TCP health check...`);
@@ -1025,11 +1101,17 @@ async function runDeployment(deployment: Deployment, service: Service) {
           appendContainerPortHint(deployment.id, startupLogs, runtimePort, secrets);
         }
         appendDeploymentLog(deployment.id, "Cleaning up temporary container...", "stderr");
-        await runCommand("docker", ["rm", "-f", tempContainerName], deployment.id).catch(() => {});
+        await runCommand("docker", ["rm", "-f", tempContainerName], deployment.id)
+          .then(() => {
+            webTempContainerNeedsCleanup = false;
+          })
+          .catch(() => {});
         throw new Error(`Health check failed: ${errMsg}`);
       }
 
+      webPreviousActivePort = currentActivePortForService(service.id, service.activePort);
       db.update(services).set({ activePort: tempPort }).where(eq(services.id, service.id)).run();
+      webActivePortChanged = true;
 
       appendDeploymentLog(deployment.id, "Hot-swapping traffic by reloading Caddy configuration...");
       const caddy = await writeAndReloadCaddy();
@@ -1043,6 +1125,9 @@ async function runDeployment(deployment: Deployment, service: Service) {
 
       appendDeploymentLog(deployment.id, `Renaming new container ${tempContainerName} to stable name ${containerName}...`);
       await runCommand("docker", ["rename", tempContainerName, containerName], deployment.id);
+      webTempContainerPromoted = true;
+      webTempContainerNeedsCleanup = false;
+      webActivePortChanged = false;
 
       const deployedAt = now();
       supersedeRunningDeployments(service.id);
@@ -1062,6 +1147,15 @@ async function runDeployment(deployment: Deployment, service: Service) {
           .where(eq(services.id, service.id))
           .run();
         appendDeploymentLog(deployment.id, "Docker image deployment aborted.", "stderr", secrets);
+        await rollbackFailedWebRollout({
+          deploymentId: deployment.id,
+          serviceId: service.id,
+          previousActivePort: webPreviousActivePort,
+          shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+          tempContainerName: webTempContainerName,
+          shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
+          secrets
+        });
         return;
       }
 
@@ -1069,6 +1163,15 @@ async function runDeployment(deployment: Deployment, service: Service) {
       appendDeploymentLog(deployment.id, `Docker image deployment failed: ${message}`, "stderr", secrets);
       db.update(deployments).set({ status: "failed", finishedAt: now() }).where(eq(deployments.id, deployment.id)).run();
       db.update(services).set({ status: "failed", updatedAt: now() }).where(eq(services.id, service.id)).run();
+      await rollbackFailedWebRollout({
+        deploymentId: deployment.id,
+        serviceId: service.id,
+        previousActivePort: webPreviousActivePort,
+        shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+        tempContainerName: webTempContainerName,
+        shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
+        secrets
+      });
     }
     return;
   }
@@ -1091,6 +1194,11 @@ async function runDeployment(deployment: Deployment, service: Service) {
 
   appendDeploymentLog(deployment.id, `Preparing workspace for ${service.name}.`);
   ensureDefaultDomainForService(service);
+  let webTempContainerName: string | null = null;
+  let webTempContainerNeedsCleanup = false;
+  let webTempContainerPromoted = false;
+  let webActivePortChanged = false;
+  let webPreviousActivePort = service.activePort;
 
   try {
     if (config.deployDryRun) {
@@ -1329,6 +1437,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
     });
     const tempPort = await getEphemeralFreePort();
     const tempContainerName = `${containerName}-${deployment.id}`;
+    webTempContainerName = tempContainerName;
     appendDeploymentLog(deployment.id, `Allocated ephemeral port ${tempPort} for zero-downtime container rollout.`);
 
     const dockerArgs = [
@@ -1348,6 +1457,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
     dockerArgs.push(imageTag);
 
     appendDeploymentLog(deployment.id, `Starting new container ${tempContainerName} mapping 127.0.0.1:${tempPort} to internal ${runtimePort}...`);
+    webTempContainerNeedsCleanup = true;
     await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
 
     appendDeploymentLog(deployment.id, `Probing port ${tempPort} for startup TCP health check...`);
@@ -1362,12 +1472,18 @@ async function runDeployment(deployment: Deployment, service: Service) {
         appendContainerPortHint(deployment.id, startupLogs, runtimePort, secrets);
       }
       appendDeploymentLog(deployment.id, "Cleaning up temporary container...", "stderr");
-      await runCommand("docker", ["rm", "-f", tempContainerName], deployment.id).catch(() => {});
+      await runCommand("docker", ["rm", "-f", tempContainerName], deployment.id)
+        .then(() => {
+          webTempContainerNeedsCleanup = false;
+        })
+        .catch(() => {});
       throw new Error(`Health check failed: ${errMsg}`);
     }
 
     // Update active port in database to route incoming requests to tempPort
+    webPreviousActivePort = currentActivePortForService(service.id, service.activePort);
     db.update(services).set({ activePort: tempPort }).where(eq(services.id, service.id)).run();
+    webActivePortChanged = true;
 
     appendDeploymentLog(deployment.id, "Hot-swapping traffic by reloading Caddy configuration...");
     const caddy = await writeAndReloadCaddy();
@@ -1383,6 +1499,9 @@ async function runDeployment(deployment: Deployment, service: Service) {
 
     appendDeploymentLog(deployment.id, `Renaming new container ${tempContainerName} to stable name ${containerName}...`);
     await runCommand("docker", ["rename", tempContainerName, containerName], deployment.id);
+    webTempContainerPromoted = true;
+    webTempContainerNeedsCleanup = false;
+    webActivePortChanged = false;
 
     const deployedAt = now();
     supersedeRunningDeployments(service.id);
@@ -1402,6 +1521,15 @@ async function runDeployment(deployment: Deployment, service: Service) {
         .where(eq(services.id, service.id))
         .run();
       appendDeploymentLog(deployment.id, "Deployment aborted.", "stderr", secrets);
+      await rollbackFailedWebRollout({
+        deploymentId: deployment.id,
+        serviceId: service.id,
+        previousActivePort: webPreviousActivePort,
+        shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+        tempContainerName: webTempContainerName,
+        shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
+        secrets
+      });
       return;
     }
 
@@ -1409,6 +1537,15 @@ async function runDeployment(deployment: Deployment, service: Service) {
     appendDeploymentLog(deployment.id, `Deployment failed: ${message}`, "stderr", secrets);
     db.update(deployments).set({ status: "failed", finishedAt: now() }).where(eq(deployments.id, deployment.id)).run();
     db.update(services).set({ status: "failed", updatedAt: now() }).where(eq(services.id, service.id)).run();
+    await rollbackFailedWebRollout({
+      deploymentId: deployment.id,
+      serviceId: service.id,
+      previousActivePort: webPreviousActivePort,
+      shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+      tempContainerName: webTempContainerName,
+      shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
+      secrets
+    });
   } finally {
     abortRequests.delete(deployment.id);
   }
@@ -1470,7 +1607,7 @@ export function startDeployWorker() {
   workerStarted = true;
   normalizeRunningDeployments();
   const interruptedDeployments = db
-    .select({ serviceId: deployments.serviceId })
+    .select({ id: deployments.id, serviceId: deployments.serviceId, containerName: deployments.containerName })
     .from(deployments)
     .where(eq(deployments.status, "building"))
     .all();
@@ -1483,6 +1620,7 @@ export function startDeployWorker() {
       .where(eq(services.id, serviceId))
       .run();
   }
+  void cleanupInterruptedDeploymentContainers(interruptedDeployments);
   setInterval(() => {
     void tickWorker();
   }, 2000);
