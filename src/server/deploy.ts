@@ -32,6 +32,7 @@ import { saveRedisDatasetIfRunning, stopRedisContainerForReplacement } from "./r
 import { deploymentConcurrency } from "./system-settings.js";
 import { buildkitStartHint, ensureBuildkitRunning } from "./buildkit.js";
 import { detectDockerfileBuild, dockerBuildArgs } from "./dockerfile-build.js";
+import { writeRailpackPrebuildConfig } from "./railpack-prebuild-config.js";
 import { removeDeploymentContainer } from "./deployment-container-cleanup.js";
 import { dockerImageForService, isDockerImageService } from "../shared/service-source.js";
 import { ensurePostgresLogicalReplication } from "./postgres-logical-replication.js";
@@ -1255,6 +1256,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
       appendDeploymentLog(deployment.id, `Found ${dockerfileDetection.dockerfileRelativePath} — building with docker build and bypassing Railpack.`);
       const ignoredOverrides = [
         service.installCommand ? "install" : "",
+        service.prebuildCommand ? "prebuild" : "",
         service.buildCommand ? "build" : "",
         service.startCommand ? "start" : ""
       ].filter(Boolean);
@@ -1273,6 +1275,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
       );
     } else {
       const savedInstallCommand = service.installCommand ?? "";
+      const prebuildCommand = service.prebuildCommand ?? "";
       const buildCommand = service.buildCommand ?? "";
       let startCommand = service.startCommand ?? "";
       const tanStackStartRuntime = prepareTanStackStartRuntime({
@@ -1285,9 +1288,9 @@ async function runDeployment(deployment: Deployment, service: Service) {
         startCommand = tanStackStartRuntime.startCommand;
         appendDeploymentLog(deployment.id, tanStackStartRuntime.message, "system", secrets);
       }
-      const packageManager = detectPackageManager(sourceDir, [savedInstallCommand, buildCommand, startCommand]);
+      const packageManager = detectPackageManager(sourceDir, [savedInstallCommand, prebuildCommand, buildCommand, startCommand]);
       const installCommand = savedInstallCommand;
-      const hasCommandOverrides = Boolean(installCommand || buildCommand || startCommand);
+      const hasCommandOverrides = Boolean(installCommand || prebuildCommand || buildCommand || startCommand);
       const looksLikeBunProject = packageManager === "bun";
 
       const railpackEnv: Record<string, string> = {
@@ -1315,6 +1318,9 @@ async function runDeployment(deployment: Deployment, service: Service) {
       if (savedInstallCommand) {
         appendDeploymentLog(deployment.id, `Using custom install command: ${installCommand}`, "system", secrets);
       }
+      if (prebuildCommand) {
+        appendDeploymentLog(deployment.id, `Using custom prebuild command: ${prebuildCommand}`, "system", secrets);
+      }
       if (buildCommand) {
         appendDeploymentLog(deployment.id, `Using custom build command: ${buildCommand}`, "system", secrets);
       }
@@ -1328,7 +1334,13 @@ async function runDeployment(deployment: Deployment, service: Service) {
       await ensureBuildkitAvailable(deployment.id);
       const railpackArgs = ["build", "--name", imageTag, "--progress", "plain", "--cache-key", service.id];
       railpackArgs.push(...railpackBuildEnvArgs(buildEnv));
-      const railpackConfigFile = railpackEnv.RAILPACK_CONFIG_FILE;
+      const railpackConfigFile = prebuildCommand
+        ? writeRailpackPrebuildConfig({
+          appDir,
+          configuredConfigFile: railpackEnv.RAILPACK_CONFIG_FILE ?? null,
+          prebuildCommand
+        })
+        : railpackEnv.RAILPACK_CONFIG_FILE;
       if (railpackConfigFile) {
         appendDeploymentLog(deployment.id, `Using Railpack config file: ${railpackConfigFile}`, "system", secrets);
         railpackArgs.push("--config-file", railpackConfigFile);
