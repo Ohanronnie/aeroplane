@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS projects (
   github_token TEXT,
   webhook_secret TEXT NOT NULL,
   install_command TEXT,
+  prebuild_command TEXT,
   build_command TEXT,
   start_command TEXT,
   static_output TEXT,
@@ -242,6 +243,10 @@ if (!hasColumn("projects", "active_port")) {
 
 if (!hasColumn("projects", "runtime_mode")) {
   sqlite.exec("ALTER TABLE projects ADD COLUMN runtime_mode TEXT NOT NULL DEFAULT 'web'");
+}
+
+if (!hasColumn("projects", "prebuild_command")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN prebuild_command TEXT");
 }
 
 if (!hasColumn("projects", "database_public_enabled")) {
