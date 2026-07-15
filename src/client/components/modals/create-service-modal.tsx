@@ -132,6 +132,7 @@ export function CreateServiceModal({
     runtimeMode: "web",
     internalPort: 8080,
     installCommand: "",
+    prebuildCommand: "",
     buildCommand: "",
     startCommand: "",
     staticOutput: ""
@@ -192,6 +193,7 @@ export function CreateServiceModal({
         runtimeMode: "web",
         internalPort: 8080,
         installCommand: "",
+        prebuildCommand: "",
         buildCommand: "",
         startCommand: "",
         staticOutput: ""
@@ -462,6 +464,7 @@ export function CreateServiceModal({
         repoUrl: isUrlSource ? form.repoUrl?.trim() : undefined,
         rootDir: form.rootDir || undefined,
         installCommand: form.installCommand || undefined,
+        prebuildCommand: form.prebuildCommand || undefined,
         buildCommand: form.buildCommand || undefined,
         startCommand: form.startCommand || undefined,
         runtimeMode: form.runtimeMode,
@@ -1126,10 +1129,14 @@ export function CreateServiceModal({
                     <FormInput value={form.installCommand ?? ""} onChange={(event) => setForm({ ...form, installCommand: event.target.value })} placeholder="auto" />
                   </div>
                   <div>
+                    <FieldLabel>Prebuild command</FieldLabel>
+                    <FormInput value={form.prebuildCommand ?? ""} onChange={(event) => setForm({ ...form, prebuildCommand: event.target.value })} placeholder="none" />
+                  </div>
+                  <div>
                     <FieldLabel>Build command</FieldLabel>
                     <FormInput value={form.buildCommand ?? ""} onChange={(event) => setForm({ ...form, buildCommand: event.target.value })} placeholder="auto" />
                   </div>
-                  <div className="md:col-span-2">
+                  <div>
                     <FieldLabel>Start command</FieldLabel>
                     <FormInput value={form.startCommand ?? ""} onChange={(event) => setForm({ ...form, startCommand: event.target.value })} placeholder="auto" />
                   </div>
