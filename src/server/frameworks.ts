@@ -26,6 +26,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 type FrameworkDetectionOptions = {
   buildCommand?: null | string;
   installCommand?: null | string;
+  prebuildCommand?: null | string;
   serviceName?: null | string;
   startCommand?: null | string;
 };
@@ -36,7 +37,7 @@ type PackageJsonRead = {
 };
 
 function detectionCommandSignature(options: FrameworkDetectionOptions = {}) {
-  return [options.installCommand, options.buildCommand, options.startCommand]
+  return [options.installCommand, options.prebuildCommand, options.buildCommand, options.startCommand]
     .map((command) => command?.trim() ?? "")
     .filter(Boolean)
     .join(" :: ");
