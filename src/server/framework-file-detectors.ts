@@ -3,6 +3,7 @@ import { FRAMEWORK_ICON_CATALOG, type FrameworkIconCatalogEntry } from "./framew
 export type FrameworkFileDetectionOptions = {
   buildCommand?: null | string;
   installCommand?: null | string;
+  prebuildCommand?: null | string;
   serviceName?: null | string;
   startCommand?: null | string;
 };
@@ -55,7 +56,7 @@ function filePath(rootDir: null | string, fileName: string) {
 }
 
 function commandText(options: FrameworkFileDetectionOptions) {
-  return [options.installCommand, options.buildCommand, options.startCommand, options.serviceName]
+  return [options.installCommand, options.prebuildCommand, options.buildCommand, options.startCommand, options.serviceName]
     .map((value) => value?.trim() ?? "")
     .filter(Boolean)
     .join(" ");
