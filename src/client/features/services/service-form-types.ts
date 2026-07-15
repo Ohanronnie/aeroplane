@@ -11,6 +11,7 @@ export type ServiceFormPayload = {
   dockerImage?: string;
   internalPort: number;
   installCommand?: string;
+  prebuildCommand?: string;
   buildCommand?: string;
   startCommand?: string;
   staticOutput?: string;
