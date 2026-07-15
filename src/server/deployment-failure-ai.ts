@@ -43,6 +43,7 @@ function formatDeployment(deployment: Deployment, service: Service) {
     `Branch: ${service.branch}`,
     `Root directory: ${service.rootDir || "/"}`,
     `Install command: ${service.installCommand || "auto"}`,
+    `Prebuild command: ${service.prebuildCommand || "none"}`,
     `Build command: ${service.buildCommand || "auto"}`,
     `Start command: ${service.startCommand || "auto"}`,
     `Static output: ${service.staticOutput || "none"}`,
