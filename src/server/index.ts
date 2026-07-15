@@ -251,6 +251,7 @@ const serviceSettingsSchema = z.object({
   rootDir: optionalRootDir,
   githubToken: optionalString,
   installCommand: optionalCommand,
+  prebuildCommand: optionalCommand,
   buildCommand: optionalCommand,
   startCommand: optionalCommand,
   staticOutput: optionalString,
@@ -488,6 +489,7 @@ const updateServiceSchema = z.object({
   rootDir: clearableRootDir,
   githubToken: optionalString.nullish(),
   installCommand: clearableCommand,
+  prebuildCommand: clearableCommand,
   buildCommand: clearableCommand,
   startCommand: clearableCommand,
   staticOutput: clearableString,
@@ -805,6 +807,7 @@ async function publicService(service: Service, options: PublicServiceOptions = {
     : await detectServiceFramework(service.repoFullName, service.branch, service.rootDir, {
         buildCommand: service.buildCommand,
         installCommand: service.installCommand,
+        prebuildCommand: service.prebuildCommand,
         serviceName: service.name,
         startCommand: service.startCommand
       });
@@ -822,6 +825,7 @@ async function publicService(service: Service, options: PublicServiceOptions = {
     rootDir: service.rootDir,
     hasGithubToken: Boolean(service.githubToken),
     installCommand: service.installCommand,
+    prebuildCommand: service.prebuildCommand,
     buildCommand: service.buildCommand,
     startCommand: service.startCommand,
     staticOutput: service.staticOutput,
@@ -905,6 +909,7 @@ function createServiceRecord(projectId: string, input: z.infer<typeof createServ
     githubToken: isFunction ? null : input.githubToken ?? null,
     webhookSecret: randomBytes(24).toString("hex"),
     installCommand: isFunction ? null : input.installCommand ?? null,
+    prebuildCommand: isFunction ? null : input.prebuildCommand ?? null,
     buildCommand: isFunction ? null : input.buildCommand ?? null,
     startCommand: isFunction ? null : input.startCommand ?? null,
     staticOutput: isFunction ? null : input.staticOutput ?? null,
