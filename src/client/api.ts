@@ -30,6 +30,7 @@ export type Service = {
   rootDir: null | string;
   hasGithubToken: boolean;
   installCommand: null | string;
+  prebuildCommand: null | string;
   buildCommand: null | string;
   startCommand: null | string;
   staticOutput: null | string;
