@@ -309,6 +309,7 @@ export function ServiceOverviewPanel({
               <DefinitionRow label="Root directory" value={rootDir} />
               {!isDatabase ? <DefinitionRow label="Builder" value={buildMethodLabel(service)} /> : null}
               <DefinitionRow label="Install" value={valueOrAuto(service.installCommand)} />
+              <DefinitionRow label="Prebuild" value={service.prebuildCommand?.trim() || "none"} />
               <DefinitionRow label="Build" value={valueOrAuto(service.buildCommand)} />
               <DefinitionRow label="Start" value={valueOrAuto(service.startCommand)} />
               {!isWorker ? <DefinitionRow label="Static output" value={valueOrAuto(service.staticOutput)} /> : null}
