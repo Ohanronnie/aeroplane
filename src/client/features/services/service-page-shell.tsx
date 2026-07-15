@@ -76,6 +76,7 @@ type ServiceSettingsState = {
   branch: string;
   rootDir: string;
   installCommand: string;
+  prebuildCommand: string;
   buildCommand: string;
   startCommand: string;
   staticOutput: string;
@@ -107,6 +108,7 @@ function settingsFromService(service: Service): ServiceSettingsState {
     branch: service.branch,
     rootDir: service.rootDir ?? "",
     installCommand: service.installCommand ?? "",
+    prebuildCommand: service.prebuildCommand ?? "",
     buildCommand: service.buildCommand ?? "",
     startCommand: service.startCommand ?? "",
     staticOutput: service.staticOutput ?? "",
@@ -171,6 +173,7 @@ export function ServicePageShell({
     branch: "",
     rootDir: "",
     installCommand: "",
+    prebuildCommand: "",
     buildCommand: "",
     startCommand: "",
     staticOutput: "",
@@ -478,6 +481,7 @@ export function ServicePageShell({
       branch: formValue(form, "branch", settings.branch),
       rootDir: formValue(form, "rootDir", settings.rootDir),
       installCommand: formValue(form, "installCommand", settings.installCommand),
+      prebuildCommand: formValue(form, "prebuildCommand", settings.prebuildCommand),
       buildCommand: formValue(form, "buildCommand", settings.buildCommand),
       startCommand: formValue(form, "startCommand", settings.startCommand),
       staticOutput: formValue(form, "staticOutput", settings.staticOutput),
@@ -506,6 +510,7 @@ export function ServicePageShell({
         branch: submittedSettings.branch,
         rootDir: isDatabase || isDockerImage || isFunction ? undefined : textOrNull(submittedSettings.rootDir),
         installCommand: isDatabase || isDockerImage || isFunction ? undefined : textOrNull(submittedSettings.installCommand),
+        prebuildCommand: isDatabase || isDockerImage || isFunction ? undefined : textOrNull(submittedSettings.prebuildCommand),
         buildCommand: isDatabase || isDockerImage || isFunction ? undefined : textOrNull(submittedSettings.buildCommand),
         startCommand: isDatabase || isDockerImage || isFunction ? undefined : textOrNull(submittedSettings.startCommand),
         staticOutput: isDatabase || isDockerImage || isFunction ? undefined : textOrNull(submittedSettings.staticOutput),
@@ -929,6 +934,10 @@ export function ServicePageShell({
                         <div>
                           <FieldLabel>Install command</FieldLabel>
                           <FormInput name="installCommand" value={settings.installCommand} onChange={(event) => setSettings((current) => ({ ...current, installCommand: event.target.value }))} placeholder="auto" />
+                        </div>
+                        <div>
+                          <FieldLabel>Prebuild command</FieldLabel>
+                          <FormInput name="prebuildCommand" value={settings.prebuildCommand} onChange={(event) => setSettings((current) => ({ ...current, prebuildCommand: event.target.value }))} placeholder="none" />
                         </div>
                         <div>
                           <FieldLabel>Build command</FieldLabel>
