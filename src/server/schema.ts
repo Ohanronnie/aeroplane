@@ -22,6 +22,7 @@ export const services = sqliteTable("projects", {
   githubToken: text("github_token"),
   webhookSecret: text("webhook_secret").notNull(),
   installCommand: text("install_command"),
+  prebuildCommand: text("prebuild_command"),
   buildCommand: text("build_command"),
   startCommand: text("start_command"),
   staticOutput: text("static_output"),
