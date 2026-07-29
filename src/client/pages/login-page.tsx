@@ -1,89 +1,64 @@
-import { Login02Icon, ShieldUserIcon } from "@hugeicons/core-free-icons";
-import { FormEvent, useState } from "react";
-import { api } from "../api";
-import { AppIcon, FieldLabel, FormInput } from "../components/ui/primitives";
 import { BrandMark } from "../components/ui/brand-mark";
+import { LoginForm } from "../components/auth/login-form";
 import { usePageTitle } from "../lib/page-title";
 
 export function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
   usePageTitle("Login");
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError("");
-    try {
-      await api.login({ email, password });
-      window.dispatchEvent(new Event("aeroplane-auth-changed"));
-      window.location.assign("/");
-    } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "Could not sign in");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   return (
-    <main className="relative isolate grid min-h-dvh place-items-center overflow-hidden bg-zinc-950 px-5 py-10 text-zinc-100">
-      <div aria-hidden className="hero-noise pointer-events-none absolute inset-0" />
+    <main className="relative isolate min-h-dvh overflow-hidden bg-black text-white">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_60%_at_0%_0%,rgba(79,184,178,0.12),transparent),radial-gradient(ellipse_70%_50%_at_100%_100%,rgba(120,113,255,0.08),transparent)]"
+        className="hero-noise pointer-events-none absolute inset-0"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 [background-image:linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:72px_72px]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(255,255,255,0.07),transparent_28%)]"
       />
 
-      <section className="relative z-10 w-full max-w-md border border-zinc-800 bg-zinc-950/88 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-        <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#4FB8B2]">
-            <BrandMark />
-          </div>
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">Aeroplane access</div>
-            <h1 className="font-hero text-xl tracking-tight text-zinc-100">Sign in</h1>
-          </div>
-        </div>
-
-        <form onSubmit={submit} className="mt-8 space-y-4">
-          <div>
-            <FieldLabel>Email</FieldLabel>
-            <FormInput
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <FieldLabel>Password</FieldLabel>
-            <FormInput
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
+      <div className="relative z-10 grid min-h-dvh w-full lg:grid-cols-[minmax(0,1.12fr)_minmax(480px,0.88fr)]">
+        <section className="relative flex min-h-[420px] flex-col overflow-hidden border-b border-white/10 px-6 py-6 sm:px-10 lg:min-h-dvh lg:border-b-0 lg:border-r lg:px-16 lg:pb-14 lg:pt-8">
+          <div className="relative z-10 flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10">
+              <BrandMark className="h-[18px] w-[18px] brightness-0 invert" />
+            </span>
+            <div>
+              <div className="font-hero text-sm tracking-[-0.02em] text-white">
+                aeroplane
+              </div>
+              <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.25em] text-zinc-500">
+                Control plane
+              </div>
+            </div>
           </div>
 
-          {error ? <div className="border border-rose-500/35 bg-rose-950/30 px-3 py-2 font-mono text-xs text-rose-300">{error}</div> : null}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 border border-[#4FB8B2]/50 bg-[#4FB8B2]/15 px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7fe3dd] transition-colors hover:bg-[#4FB8B2]/25 disabled:opacity-60"
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-44 -left-40 h-[680px] w-[680px] opacity-90"
           >
-            <AppIcon icon={submitting ? ShieldUserIcon : Login02Icon} size={16} />
-            {submitting ? "Signing in" : "Sign in"}
-          </button>
-        </form>
-      </section>
+            <div className="absolute inset-0 rounded-full border border-white/[0.06]" />
+            <div className="absolute inset-[90px] rounded-full border border-white/[0.08]" />
+            <div className="absolute inset-[180px] rounded-full border border-white/10" />
+            <div className="absolute inset-[265px] grid place-items-center rounded-full border border-white/20 bg-white/[0.04]">
+              <BrandMark className="h-8 w-8 rotate-[-18deg] brightness-0 invert opacity-80" />
+            </div>
+            <div className="absolute right-[73px] top-[305px] h-2 w-2 rounded-full bg-white shadow-[0_0_22px_rgba(255,255,255,0.65)]" />
+            <div className="absolute left-[210px] top-[182px] h-1.5 w-1.5 rounded-full bg-white/60" />
+            <div className="absolute left-[246px] top-[285px] h-28 w-px rotate-[44deg] bg-gradient-to-b from-transparent via-white/40 to-transparent" />
+          </div>
+
+          <div className="relative z-10 mt-auto max-w-xs">
+            <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+              Private deployment platform
+            </p>
+            <div className="mt-3 h-px w-16 bg-white/20" />
+          </div>
+        </section>
+
+        <section className="flex items-center justify-start bg-zinc-950 px-5 py-10 sm:px-10 lg:min-h-dvh lg:px-8">
+          <LoginForm />
+        </section>
+      </div>
     </main>
   );
 }
