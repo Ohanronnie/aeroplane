@@ -7,7 +7,8 @@ export function Checkbox({
   disabled = false,
   children,
   className = "",
-  boxClassName = ""
+  boxClassName = "",
+  variant = "default"
 }: {
   checked: boolean;
   label: string;
@@ -16,7 +17,17 @@ export function Checkbox({
   children?: ReactNode;
   className?: string;
   boxClassName?: string;
+  variant?: "default" | "monochrome";
 }) {
+  const checkedClass =
+    variant === "monochrome"
+      ? "border-white bg-white text-black"
+      : "border-[#4FB8B2] bg-[#4FB8B2] text-zinc-950";
+  const focusClass =
+    variant === "monochrome"
+      ? "peer-focus-visible:ring-white/40"
+      : "peer-focus-visible:ring-[#4FB8B2]/50";
+
   return (
     <label className={`group inline-flex select-none items-center gap-2 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} ${className}`}>
       <input
@@ -29,9 +40,9 @@ export function Checkbox({
       />
       <span
         aria-hidden="true"
-        className={`grid h-4 w-4 place-items-center border transition peer-focus-visible:ring-2 peer-focus-visible:ring-[#4FB8B2]/50 ${
+        className={`grid h-4 w-4 place-items-center border transition peer-focus-visible:ring-2 ${focusClass} ${
           checked
-            ? "border-[#4FB8B2] bg-[#4FB8B2] text-zinc-950"
+            ? checkedClass
             : "border-zinc-700 bg-zinc-950 text-transparent group-hover:border-zinc-500 group-hover:bg-zinc-900"
         } ${boxClassName}`}
       >
