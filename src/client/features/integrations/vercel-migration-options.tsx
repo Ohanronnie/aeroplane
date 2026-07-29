@@ -18,6 +18,7 @@ export function VercelMigrationOptions({
   return (
     <div className="flex flex-col justify-end space-y-2.5 pb-1">
       <Checkbox
+        variant="monochrome"
         checked={excludeSystemVars}
         onChange={onExcludeSystemVarsChange}
         disabled={busy}
@@ -29,6 +30,7 @@ export function VercelMigrationOptions({
       </Checkbox>
 
       <Checkbox
+        variant="monochrome"
         checked={autoDeploy}
         onChange={onAutoDeployChange}
         disabled={busy}
