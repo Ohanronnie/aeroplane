@@ -67,13 +67,22 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   return <span className="mb-2 block font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{children}</span>;
 }
 
-export const FormInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  (props, ref) => {
+export const FormInput = forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement> & {
+    variant?: "default" | "monochrome";
+  }
+>(
+  ({ variant = "default", className = "", ...props }, ref) => {
+    const focusClass =
+      variant === "monochrome"
+        ? "focus:border-white focus:ring-2 focus:ring-white/10"
+        : "focus:border-[#4FB8B2]/60";
     return (
       <input
         {...props}
         ref={ref}
-        className={`h-11 w-full border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-[#4FB8B2]/60 ${props.className ?? ""}`}
+        className={`h-11 w-full border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 ${focusClass} ${className}`}
       />
     );
   }
