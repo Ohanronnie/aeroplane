@@ -36,7 +36,7 @@ export function ControlPlaneDomainInstructions({ hostname, publicIp }: { hostnam
       </div>
       <div className="grid border-b border-zinc-800 font-mono text-[11px] sm:grid-cols-[110px_minmax(0,1fr)]">
         <div className="border-b border-zinc-800 px-4 py-3 uppercase tracking-[0.18em] text-zinc-600 sm:border-b-0 sm:border-r">Host</div>
-        <div className="px-4 py-3 font-semibold text-[#7fe3dd]">{normalizedHostname}</div>
+        <div className="px-4 py-3 font-semibold text-white">{normalizedHostname}</div>
       </div>
       <div className="grid font-mono text-[11px] sm:grid-cols-[110px_minmax(0,1fr)]">
         <div className="border-b border-zinc-800 px-4 py-3 uppercase tracking-[0.18em] text-zinc-600 sm:border-b-0 sm:border-r">Value</div>
