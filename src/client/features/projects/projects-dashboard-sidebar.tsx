@@ -1,0 +1,94 @@
+import {
+  FolderCodeIcon,
+  Settings01Icon,
+} from "@hugeicons/core-free-icons";
+import type { AuthUser, ToolCheck } from "../../api";
+import { SignOutButton } from "../../components/auth/sign-out-button";
+import { BrandMark } from "../../components/ui/brand-mark";
+import { AppIcon } from "../../components/ui/primitives";
+import { settingsPathForTab } from "../settings/settings-pages";
+import { SystemHealthPill } from "./system-health-pill";
+
+function userInitials(user: AuthUser | null) {
+  const source = user?.name || user?.email || "A";
+  return source
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+export function ProjectsDashboardSidebar({
+  currentUser,
+  tools,
+  owner
+}: {
+  currentUser: AuthUser | null;
+  tools: ToolCheck[];
+  owner: boolean;
+}) {
+  return (
+    <aside className="relative z-20 flex items-center border-b border-white/10 bg-black px-5 py-4 lg:sticky lg:top-0 lg:h-dvh lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+      <div className="flex items-center gap-3">
+        <span className="grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10">
+          <BrandMark className="h-[18px] w-[18px] brightness-0 invert" />
+        </span>
+        <div>
+          <div className="font-hero text-sm tracking-[-0.02em] text-white">
+            aeroplane
+          </div>
+          <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.25em] text-zinc-500">
+            Control plane
+          </div>
+        </div>
+      </div>
+
+      <nav aria-label="Dashboard" className="mt-10 hidden lg:block">
+        <p className="mb-3 px-3 font-mono text-[8px] font-semibold uppercase tracking-[0.2em] text-zinc-600">
+          Workspace
+        </p>
+        <a
+          href="/"
+          aria-current="page"
+          className="flex h-11 items-center gap-3 border-l-2 border-white bg-white/10 px-3 text-white transition hover:bg-white/15"
+        >
+          <AppIcon icon={FolderCodeIcon} size={16} />
+          <span className="text-sm">Projects</span>
+        </a>
+        {owner ? (
+          <a
+            href={settingsPathForTab()}
+            className="mt-1 flex h-11 w-full items-center gap-3 px-3 text-zinc-500 transition hover:bg-white/5 hover:text-white"
+          >
+            <AppIcon icon={Settings01Icon} size={16} />
+            <span className="text-sm">System settings</span>
+          </a>
+        ) : null}
+      </nav>
+
+      <div className="ml-auto flex items-center gap-2 lg:ml-0 lg:mt-auto lg:block">
+        {owner ? (
+          <div className="hidden lg:block">
+            <SystemHealthPill tools={tools} />
+          </div>
+        ) : null}
+
+        <div className="flex items-center gap-3 lg:mt-4 lg:border-t lg:border-white/10 lg:pt-4">
+          <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white text-xs font-bold text-black">
+            {userInitials(currentUser)}
+          </span>
+          <span className="hidden min-w-0 flex-1 lg:block">
+            <span className="block truncate text-xs font-semibold text-white">
+              {currentUser?.name || "Aeroplane user"}
+            </span>
+            <span className="mt-0.5 block truncate font-mono text-[8px] uppercase tracking-[0.14em] text-zinc-600">
+              {currentUser?.role || "Member"}
+            </span>
+          </span>
+          <SignOutButton className="border-white/10 bg-transparent hover:border-white/25 hover:bg-white/5 hover:text-white" />
+        </div>
+      </div>
+    </aside>
+  );
+}
