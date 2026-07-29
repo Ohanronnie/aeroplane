@@ -1,17 +1,16 @@
 import {
-  AddSquareIcon,
+  AlertCircleIcon,
   CheckmarkCircle02Icon,
   CopyCheckIcon,
   CopyIcon,
   Delete02Icon,
-  Globe02Icon,
   PencilEdit02Icon,
   Refresh03Icon
 } from "@hugeicons/core-free-icons";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { isWildcardRootDomain, normalizeRootDomain, wildcardRootDomain } from "../../lib/root-domain";
-import { AppIcon, FieldLabel, FormInput, shellButton, statusClass } from "../ui/primitives";
+import { AppIcon, FieldLabel, FormInput } from "../ui/primitives";
 import { ConfirmationDialog } from "./confirmation-dialog";
 
 function recordNameFor(domain: string) {
@@ -37,6 +36,7 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
   const hasSavedDomain = savedRootDomain.length > 0;
   const hasUnsavedChanges = normalizedRootDomain !== savedRootDomain;
   const wildcardHostname = recordNameFor(savedRootDomain || normalizedRootDomain);
+  const waitingForDns = success.startsWith("Still waiting");
 
   useEffect(() => {
     if (!open) {
@@ -144,67 +144,101 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
   }
 
   return (
-    <div className="space-y-5">
-      {!hasSavedDomain && !editingDomain ? (
-        <section className="flex min-h-[440px] items-center justify-center border border-zinc-800 bg-zinc-950/45 p-8 text-center">
-          <div className="max-w-xl">
-            <div className="mx-auto grid h-14 w-14 place-items-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd]">
-              <AppIcon icon={Globe02Icon} size={24} />
+    <section className="p-5 sm:p-7 lg:p-8">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl tracking-[-0.03em] text-white">Service domains</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
+            A wildcard hostname used to generate a default URL for every service.
+          </p>
+          {hasSavedDomain && !editingDomain ? (
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <span className="text-lg text-zinc-100">{wildcardRootDomain(savedRootDomain)}</span>
+              <span className="inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">
+                <span className={`h-1.5 w-1.5 ${dnsStatus === "active" ? "bg-white" : "border border-zinc-600"}`} />
+                {dnsStatus === "active" ? "DNS active" : "DNS pending"}
+              </span>
             </div>
-            <h3 className="mt-6 font-hero text-2xl tracking-tight text-zinc-100">Set a root domain</h3>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-400">
-              Aeroplane uses a wildcard DNS record to create default URLs for every service, like api.your-domain.com.
-            </p>
-            <button type="button" className={`${shellButton("primary")} mt-8`} onClick={() => setEditingDomain(true)}>
-              <AppIcon icon={AddSquareIcon} size={16} />
-              Set root domain
+          ) : null}
+        </div>
+
+        {hasSavedDomain && !editingDomain ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center border border-white/15 text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.06] hover:text-white disabled:opacity-50"
+              onClick={() => {
+                setRootDomain(wildcardRootDomain(savedRootDomain));
+                setEditingDomain(true);
+              }}
+              disabled={saving}
+              title="Edit root domain"
+              aria-label="Edit root domain"
+            >
+              <AppIcon icon={PencilEdit02Icon} size={15} />
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.06] hover:text-white disabled:opacity-50"
+              onClick={() => setClearDialogOpen(true)}
+              disabled={saving}
+              title="Delete root domain"
+              aria-label="Delete root domain"
+            >
+              <AppIcon icon={Delete02Icon} size={15} />
             </button>
           </div>
-        </section>
+        ) : null}
+      </div>
+
+      {!hasSavedDomain && !editingDomain ? (
+        <button
+          type="button"
+          className="mt-6 inline-flex min-h-10 w-fit items-center justify-center bg-white px-4 text-sm text-black transition hover:bg-zinc-200"
+          onClick={() => setEditingDomain(true)}
+        >
+          Set root domain
+        </button>
       ) : null}
 
       {editingDomain ? (
-        <form onSubmit={saveSettings} className="space-y-5 border border-zinc-800 bg-zinc-950/45 p-6">
-          <div className="flex items-start gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd]">
-              <AppIcon icon={Globe02Icon} size={18} />
-            </div>
-            <div>
-              <h3 className="font-hero text-lg tracking-tight text-zinc-100">{hasSavedDomain ? "Change root domain" : "Set root domain"}</h3>
-              <p className="mt-1 text-sm leading-relaxed text-zinc-400">Enter the wildcard DNS hostname Aeroplane should use for generated service URLs.</p>
-            </div>
-          </div>
+        <form onSubmit={saveSettings} className="mt-7 max-w-xl">
+          <FieldLabel>Wildcard root domain</FieldLabel>
+          <FormInput
+            value={rootDomain}
+            onBlur={() => {
+              if (rootDomainUsesWildcard) setRootDomain(wildcardRootDomain(normalizedRootDomain));
+            }}
+            onChange={(event) => setRootDomain(event.target.value)}
+            placeholder="*.pilot.aeroplane.run"
+            required
+            inputMode="url"
+            autoComplete="off"
+            variant="monochrome"
+            className="border-white/15 bg-white/[0.03]"
+          />
+          {rootDomain.trim() && !rootDomainUsesWildcard ? (
+            <p className="mt-2 text-xs leading-5 text-zinc-300">
+              Include the wildcard prefix, for example *.pilot.aeroplane.run.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs leading-5 text-zinc-500">
+              Services will use URLs like {"{slug}"}.{normalizedRootDomain || "your-domain.com"}.
+            </p>
+          )}
 
-          <div>
-            <FieldLabel>Wildcard root domain</FieldLabel>
-            <FormInput
-              value={rootDomain}
-              onBlur={() => {
-                if (rootDomainUsesWildcard) setRootDomain(wildcardRootDomain(normalizedRootDomain));
-              }}
-              onChange={(event) => setRootDomain(event.target.value)}
-              placeholder="*.pilot.aeroplane.run"
-              required
-              inputMode="url"
-              autoComplete="off"
-            />
-            {rootDomain.trim() && !rootDomainUsesWildcard ? (
-              <p className="mt-2 font-mono text-[10px] leading-relaxed text-rose-300">Include the wildcard prefix, e.g. *.pilot.aeroplane.run.</p>
-            ) : (
-              <p className="mt-2 font-mono text-[10px] leading-relaxed text-zinc-500">
-                Services will receive URLs like <span className="text-[#4FB8B2]">{"{slug}"}.{normalizedRootDomain || "your-domain.com"}</span>.
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" className={shellButton("primary")} disabled={saving || !normalizedRootDomain || !hasUnsavedChanges || !rootDomainUsesWildcard}>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              className="inline-flex min-h-10 w-fit items-center justify-center bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={saving || !normalizedRootDomain || !hasUnsavedChanges || !rootDomainUsesWildcard}
+            >
               {saving ? "Saving..." : "Save root domain"}
             </button>
             {hasSavedDomain ? (
               <button
                 type="button"
-                className={shellButton("ghost")}
+                className="inline-flex min-h-10 items-center justify-center border border-white/15 px-4 text-sm text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
                 onClick={() => {
                   setRootDomain(wildcardRootDomain(savedRootDomain));
                   setEditingDomain(false);
@@ -219,110 +253,71 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
       ) : null}
 
       {hasSavedDomain && !editingDomain ? (
-        <section className="space-y-4">
-          <div className="border border-zinc-800 bg-zinc-950/45 p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Wildcard root domain</div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <h3 className="font-hero text-2xl tracking-tight text-zinc-100">{wildcardRootDomain(savedRootDomain)}</h3>
-                  <span className={`px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${statusClass(dnsStatus)}`}>
-                    {dnsStatus === "active" ? "DNS active" : "DNS pending"}
-                  </span>
+        <div className="mt-7 border-y border-white/10">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-4 py-4 text-left"
+            onClick={() => setInstructionsOpen((value) => !value)}
+          >
+            <span>
+              <span className="block text-sm text-zinc-200">DNS setup</span>
+              <span className="mt-1 block text-xs text-zinc-500">Add one wildcard A record.</span>
+            </span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">
+              {instructionsOpen ? "Hide" : "Show"}
+            </span>
+          </button>
+
+          {instructionsOpen ? (
+            <div className="border-t border-white/10 pb-5">
+              <div className="max-w-2xl font-mono text-[10px]">
+                <div className="grid grid-cols-[100px_minmax(0,1fr)] border-b border-white/10">
+                  <div className="py-3 uppercase tracking-[0.18em] text-zinc-600">Type</div>
+                  <div className="py-3 text-zinc-200">A</div>
                 </div>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-                  New services will get default URLs like <span className="text-[#4FB8B2]">api.{savedRootDomain}</span>.
-                </p>
+                <div className="grid grid-cols-[100px_minmax(0,1fr)] border-b border-white/10">
+                  <div className="py-3 uppercase tracking-[0.18em] text-zinc-600">Name</div>
+                  <div className="py-3 text-zinc-200">
+                    *
+                    <span className="ml-3 text-zinc-600">{wildcardHostname}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-[100px_minmax(0,1fr)]">
+                  <div className="py-3 uppercase tracking-[0.18em] text-zinc-600">Value</div>
+                  <div className="flex min-w-0 items-center gap-2 py-3">
+                    <span className="truncate text-zinc-200">{publicIp}</span>
+                    <button type="button" onClick={copyIp} className="shrink-0 p-0.5 text-zinc-500 transition-colors hover:text-white" title={copiedIp ? "Copied" : "Copy IP"}>
+                      <AppIcon icon={copiedIp ? CopyCheckIcon : CopyIcon} size={13} />
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-[#4FB8B2]/45 hover:bg-[#4FB8B2]/10 hover:text-[#7fe3dd] disabled:opacity-55"
-                  onClick={() => {
-                    setRootDomain(wildcardRootDomain(savedRootDomain));
-                    setEditingDomain(true);
-                  }}
-                  disabled={saving}
-                  title="Edit root domain"
-                  aria-label="Edit root domain"
-                >
-                  <AppIcon icon={PencilEdit02Icon} size={15} />
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-rose-500/45 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-55"
-                  onClick={() => setClearDialogOpen(true)}
-                  disabled={saving}
-                  title="Delete root domain"
-                  aria-label="Delete root domain"
-                >
-                  <AppIcon icon={Delete02Icon} size={15} />
-                </button>
-              </div>
+
+              <button
+                type="button"
+                className="mt-5 inline-flex h-10 items-center justify-center gap-2 border border-white/15 px-3.5 text-sm text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void refreshSettings()}
+                disabled={verifying}
+              >
+                <AppIcon icon={Refresh03Icon} size={13} className={verifying ? "animate-spin" : ""} />
+                Verify DNS
+              </button>
             </div>
-          </div>
-
-          <div className="border border-zinc-800 bg-zinc-900/10">
-            <button type="button" className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left" onClick={() => setInstructionsOpen((value) => !value)}>
-              <div>
-                <h4 className="font-hero text-base tracking-tight text-zinc-100">DNS setup instructions</h4>
-                <p className="mt-1 text-sm text-zinc-400">Add one wildcard A record to activate generated subdomains.</p>
-              </div>
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4FB8B2]">
-                {instructionsOpen ? "Hide" : "Show"}
-              </span>
-            </button>
-
-            {instructionsOpen ? (
-              <div className="space-y-4 border-t border-zinc-800 px-5 py-5">
-                <div className="overflow-hidden border border-zinc-800 bg-zinc-950/45 font-mono text-[11px]">
-                  <div className="grid grid-cols-[88px_minmax(0,1fr)] border-b border-zinc-800">
-                    <div className="border-r border-zinc-800 px-3 py-3 uppercase tracking-[0.18em] text-zinc-600">Type</div>
-                    <div className="px-3 py-3 font-semibold text-zinc-100">A</div>
-                  </div>
-                  <div className="grid grid-cols-[88px_minmax(0,1fr)] border-b border-zinc-800">
-                    <div className="border-r border-zinc-800 px-3 py-3 uppercase tracking-[0.18em] text-zinc-600">Name</div>
-                    <div className="px-3 py-3">
-                      <div className="font-semibold text-zinc-100">*</div>
-                      <div className="mt-1 truncate text-[10px] text-zinc-500">Full hostname: {wildcardHostname}</div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-[88px_minmax(0,1fr)]">
-                    <div className="border-r border-zinc-800 px-3 py-3 uppercase tracking-[0.18em] text-zinc-600">Value</div>
-                    <div className="flex min-w-0 items-center gap-2 px-3 py-3">
-                      <span className="truncate font-semibold text-zinc-100">{publicIp}</span>
-                      <button type="button" onClick={copyIp} className="shrink-0 p-0.5 text-zinc-500 transition-colors hover:text-zinc-200" title={copiedIp ? "Copied" : "Copy IP"}>
-                        <AppIcon icon={copiedIp ? CopyCheckIcon : CopyIcon} size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 border-t border-zinc-800/80 pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                  <p className="text-xs leading-relaxed text-zinc-500">
-                    DNS changes can take a few minutes. Aeroplane will use this wildcard to route service slugs and let Caddy issue certificates.
-                  </p>
-                  <button
-                    type="button"
-                    className="inline-flex h-10 items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-100 transition hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-55"
-                    onClick={() => void refreshSettings()}
-                    disabled={verifying}
-                  >
-                    <AppIcon icon={Refresh03Icon} size={13} className={verifying ? "animate-spin" : ""} />
-                    Verify DNS
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </section>
+          ) : null}
+        </div>
       ) : null}
 
-      {error ? <div className="border border-rose-500/35 bg-rose-950/30 px-3.5 py-2.5 font-mono text-[10px] text-rose-300">{error}</div> : null}
+      {error ? <div className="mt-5 border-l-2 border-white bg-white/[0.06] px-4 py-3 text-sm text-zinc-200">{error}</div> : null}
 
       {success ? (
-        <div className="flex items-center gap-2 border border-emerald-500/35 bg-emerald-950/30 px-3.5 py-2.5 font-mono text-[10px] text-emerald-300">
-          <AppIcon icon={CheckmarkCircle02Icon} size={13} />
+        <div
+          className={
+            waitingForDns
+              ? "mt-5 flex items-center gap-2 border-l-2 border-amber-400 bg-amber-400/10 px-4 py-3 text-sm text-amber-200"
+              : "mt-5 flex items-center gap-2 border-l-2 border-emerald-400 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"
+          }
+        >
+          <AppIcon icon={waitingForDns ? AlertCircleIcon : CheckmarkCircle02Icon} size={14} />
           {success}
         </div>
       ) : null}
@@ -337,6 +332,6 @@ export function RootDomainSettingsPanel({ open }: { open: boolean }) {
         onClose={() => setClearDialogOpen(false)}
         onConfirm={clearRootDomain}
       />
-    </div>
+    </section>
   );
 }
