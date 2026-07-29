@@ -2,11 +2,11 @@ import {
   FolderCodeIcon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
+import { Link } from "@tanstack/react-router";
 import type { AuthUser, ToolCheck } from "../../api";
 import { SignOutButton } from "../../components/auth/sign-out-button";
 import { BrandMark } from "../../components/ui/brand-mark";
 import { AppIcon } from "../../components/ui/primitives";
-import { settingsPathForTab } from "../settings/settings-pages";
 import { SystemHealthPill } from "./system-health-pill";
 
 function userInitials(user: AuthUser | null) {
@@ -48,23 +48,22 @@ export function ProjectsDashboardSidebar({
         <p className="mb-3 px-3 font-mono text-[8px] font-semibold uppercase tracking-[0.2em] text-zinc-600">
           Workspace
         </p>
-        <a
-          href="/"
+        <Link
+          to="/"
           aria-current="page"
           className="flex h-11 items-center gap-3 border-l-2 border-white bg-white/10 px-3 text-white transition hover:bg-white/15"
         >
           <AppIcon icon={FolderCodeIcon} size={16} />
           <span className="text-sm">Projects</span>
-        </a>
-        {owner ? (
-          <a
-            href={settingsPathForTab()}
-            className="mt-1 flex h-11 w-full items-center gap-3 px-3 text-zinc-500 transition hover:bg-white/5 hover:text-white"
-          >
-            <AppIcon icon={Settings01Icon} size={16} />
-            <span className="text-sm">System settings</span>
-          </a>
-        ) : null}
+        </Link>
+        <Link
+          to="/settings/$settingsPage"
+          params={{ settingsPage: "domains" }}
+          className="mt-1 flex h-11 w-full items-center gap-3 px-3 text-zinc-500 transition hover:bg-white/5 hover:text-white"
+        >
+          <AppIcon icon={Settings01Icon} size={16} />
+          <span className="text-sm">System settings</span>
+        </Link>
       </nav>
 
       <div className="ml-auto flex items-center gap-2 lg:ml-0 lg:mt-auto lg:block">
