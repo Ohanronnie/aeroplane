@@ -6,8 +6,8 @@ import {
   Settings01Icon
 } from "@hugeicons/core-free-icons";
 import type { GitHubStatus, R2SettingsStatus, ToolCheck } from "../../api";
-import type { SystemSettingsTab } from "../../components/modals/system-settings-types";
 import { AppIcon } from "../../components/ui/primitives";
+import type { SystemSettingsTab } from "../settings/settings-pages";
 
 type DomainSettingsSummary = {
   settings: {
@@ -29,9 +29,9 @@ type SetupTodo = {
 };
 
 function todoToneClass(tone: SetupTodo["tone"]) {
-  if (tone === "rose") return "border-rose-500/35 bg-rose-950/20 text-rose-200";
-  if (tone === "amber") return "border-amber-500/35 bg-amber-950/20 text-amber-200";
-  return "border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#9af4ee]";
+  if (tone === "rose") return "bg-white/[0.07] text-white";
+  if (tone === "amber") return "bg-white/[0.04] text-zinc-200";
+  return "bg-black/20 text-zinc-300";
 }
 
 export function SetupTodoList({
@@ -143,26 +143,26 @@ export function SetupTodoList({
   if (todos.length === 0) return null;
 
   return (
-    <section className="border border-zinc-800 bg-zinc-950/55">
+    <section className="border border-white/10 bg-black/25">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">Setup todo</div>
+          <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Setup checklist</div>
           <div className="mt-1 text-sm text-zinc-300">
             {todos.length} item{todos.length === 1 ? "" : "s"} still need attention.
           </div>
         </div>
-        <div className="inline-flex items-center gap-2 border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/15 px-2.5 py-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
           <AppIcon icon={AlertCircleIcon} size={13} />
           Action needed
         </div>
       </div>
 
-      <ul className="border-t border-zinc-800">
+      <ul className="border-t border-white/10">
         {todos.map((todo) => (
-          <li key={todo.key} className={`border-b border-zinc-800 last:border-b-0 ${todoToneClass(todo.tone)}`}>
+          <li key={todo.key} className={`border-b border-white/10 last:border-b-0 ${todoToneClass(todo.tone)}`}>
             <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-start gap-3">
-                <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center border border-current/25 bg-black/15">
+                <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-current/20 bg-black/20">
                   <AppIcon icon={todo.icon} size={14} />
                 </div>
                 <div className="min-w-0">
@@ -172,7 +172,7 @@ export function SetupTodoList({
               </div>
               <button
                 type="button"
-                className="w-fit shrink-0 border border-current/30 bg-black/15 px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] transition hover:bg-black/25"
+                className="w-fit shrink-0 border border-current/25 bg-black/20 px-2.5 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] transition hover:bg-white hover:text-black"
                 onClick={todo.onAction}
               >
                 {todo.actionLabel}
