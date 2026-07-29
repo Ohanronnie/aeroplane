@@ -33,10 +33,10 @@ export function AiProviderModelPicker({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative mt-1" onClick={(event) => event.stopPropagation()}>
+    <div ref={rootRef} className="relative" onClick={(event) => event.stopPropagation()}>
       <button
         type="button"
-        className="flex max-w-full items-center gap-1.5 font-mono text-[10px] text-zinc-500 outline-none transition hover:text-zinc-200 focus:text-zinc-200 disabled:cursor-wait disabled:opacity-60"
+        className="flex h-11 w-full items-center justify-between gap-3 border border-white/15 bg-white/[0.03] px-3 text-left text-sm text-zinc-200 outline-none transition hover:border-white/30 focus:border-white focus:ring-2 focus:ring-white/10 disabled:cursor-wait disabled:opacity-60"
         onClick={() => setOpen((current) => !current)}
         onKeyDown={(event) => {
           if (event.key === "Escape") setOpen(false);
@@ -45,12 +45,15 @@ export function AiProviderModelPicker({
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="min-w-0 truncate">{selected?.name ?? selectedModel}</span>
-        <AppIcon icon={ArrowDown01Icon} size={12} className={`shrink-0 transition ${open ? "rotate-180" : ""}`} />
+        <span className="min-w-0 truncate">
+          {selected?.name ?? selectedModel}
+          <span className="ml-2 font-mono text-[9px] text-zinc-600">{selected?.id}</span>
+        </span>
+        <AppIcon icon={ArrowDown01Icon} size={14} className={`shrink-0 text-zinc-500 transition ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-3rem)] border border-zinc-700 bg-zinc-950 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.45)]" role="listbox">
+        <div className="absolute left-0 top-full z-50 mt-2 w-full min-w-72 border border-white/15 bg-zinc-950 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.45)]" role="listbox">
           {provider.models.map((model) => {
             const active = model.id === selectedModel;
             return (
@@ -58,7 +61,7 @@ export function AiProviderModelPicker({
                 key={model.id}
                 type="button"
                 className={`flex w-full items-center justify-between gap-3 px-2.5 py-2 text-left transition ${
-                  active ? "bg-[#4FB8B2]/15 text-[#7fe3dd]" : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                  active ? "bg-white/10 text-white" : "text-zinc-300 hover:bg-white/[0.05] hover:text-white"
                 }`}
                 onClick={() => {
                   onSelectModel(model.id);
