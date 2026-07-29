@@ -10,6 +10,7 @@ import {
 import { api, type AuthStatus } from "../../api";
 import { BrandMark } from "../ui/brand-mark";
 import { SkeletonBlock } from "../ui/skeleton";
+import { AuthStatusContext } from "./auth-context";
 
 function AuthLoading() {
   return (
@@ -93,5 +94,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (loading || redirectTo) return <AuthLoading />;
 
-  return <>{children}</>;
+  return (
+    <AuthStatusContext.Provider value={status}>
+      {children}
+    </AuthStatusContext.Provider>
+  );
 }
