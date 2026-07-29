@@ -16,11 +16,9 @@ export type DnsCredentialField = {
 export type DnsProviderDefinition = {
   id: DnsProviderId;
   name: string;
-  label: string;
   logoUrl: string;
   fields: DnsCredentialField[];
   primarySecretKey: string;
-  logoFrameClass: string;
 };
 
 export type DnsCredentialValues = Record<string, string>;
@@ -35,10 +33,8 @@ export const dnsProviders: DnsProviderDefinition[] = [
   {
     id: "cloudflare",
     name: "Cloudflare",
-    label: "API key / token + zone",
     logoUrl: cloudflareLogoUrl,
     primarySecretKey: "apiToken",
-    logoFrameClass: "border-blue-400/30 bg-blue-500/10",
     fields: [
       {
         key: "apiToken",
@@ -64,10 +60,8 @@ export const dnsProviders: DnsProviderDefinition[] = [
   {
     id: "namecheap",
     name: "Namecheap",
-    label: "API user + key",
     logoUrl: namecheapLogoUrl,
     primarySecretKey: "apiKey",
-    logoFrameClass: "border-orange-400/30 bg-orange-500/10",
     fields: [
       {
         key: "apiUser",
@@ -94,10 +88,8 @@ export const dnsProviders: DnsProviderDefinition[] = [
   {
     id: "spaceship",
     name: "Spaceship",
-    label: "API key + secret",
     logoUrl: spaceshipLogoUrl,
     primarySecretKey: "apiKey",
-    logoFrameClass: "border-fuchsia-400/30 bg-fuchsia-500/10",
     fields: [
       {
         key: "apiKey",
