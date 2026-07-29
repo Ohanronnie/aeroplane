@@ -13,8 +13,10 @@ import { Route as SvgsRouteImport } from './routes/svgs'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProjectSlugRouteImport } from './routes/$projectSlug'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as OnboardingIndexRouteImport } from './routes/onboarding/index'
 import { Route as ProjectSlugIndexRouteImport } from './routes/$projectSlug/index'
+import { Route as SettingsSettingsPageRouteImport } from './routes/settings/$settingsPage'
 import { Route as OnboardingSuccessRouteImport } from './routes/onboarding/success'
 import { Route as ProjectSlugServiceSlugRouteImport } from './routes/$projectSlug/$serviceSlug'
 import { Route as ProjectSlugServiceSlugIndexRouteImport } from './routes/$projectSlug/$serviceSlug/index'
@@ -40,6 +42,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
   id: '/onboarding/',
   path: '/onboarding/',
@@ -49,6 +56,11 @@ const ProjectSlugIndexRoute = ProjectSlugIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ProjectSlugRoute,
+} as any)
+const SettingsSettingsPageRoute = SettingsSettingsPageRouteImport.update({
+  id: '/settings/$settingsPage',
+  path: '/settings/$settingsPage',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardingSuccessRoute = OnboardingSuccessRouteImport.update({
   id: '/onboarding/success',
@@ -80,8 +92,10 @@ export interface FileRoutesByFullPath {
   '/svgs': typeof SvgsRoute
   '/$projectSlug/$serviceSlug': typeof ProjectSlugServiceSlugRouteWithChildren
   '/onboarding/success': typeof OnboardingSuccessRoute
+  '/settings/$settingsPage': typeof SettingsSettingsPageRoute
   '/$projectSlug/': typeof ProjectSlugIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/$projectSlug/$serviceSlug/$serviceTab': typeof ProjectSlugServiceSlugServiceTabRoute
   '/$projectSlug/$serviceSlug/': typeof ProjectSlugServiceSlugIndexRoute
 }
@@ -90,8 +104,10 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/svgs': typeof SvgsRoute
   '/onboarding/success': typeof OnboardingSuccessRoute
+  '/settings/$settingsPage': typeof SettingsSettingsPageRoute
   '/$projectSlug': typeof ProjectSlugIndexRoute
   '/onboarding': typeof OnboardingIndexRoute
+  '/settings': typeof SettingsIndexRoute
   '/$projectSlug/$serviceSlug/$serviceTab': typeof ProjectSlugServiceSlugServiceTabRoute
   '/$projectSlug/$serviceSlug': typeof ProjectSlugServiceSlugIndexRoute
 }
@@ -103,8 +119,10 @@ export interface FileRoutesById {
   '/svgs': typeof SvgsRoute
   '/$projectSlug/$serviceSlug': typeof ProjectSlugServiceSlugRouteWithChildren
   '/onboarding/success': typeof OnboardingSuccessRoute
+  '/settings/$settingsPage': typeof SettingsSettingsPageRoute
   '/$projectSlug/': typeof ProjectSlugIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/$projectSlug/$serviceSlug/$serviceTab': typeof ProjectSlugServiceSlugServiceTabRoute
   '/$projectSlug/$serviceSlug/': typeof ProjectSlugServiceSlugIndexRoute
 }
@@ -117,8 +135,10 @@ export interface FileRouteTypes {
     | '/svgs'
     | '/$projectSlug/$serviceSlug'
     | '/onboarding/success'
+    | '/settings/$settingsPage'
     | '/$projectSlug/'
     | '/onboarding/'
+    | '/settings/'
     | '/$projectSlug/$serviceSlug/$serviceTab'
     | '/$projectSlug/$serviceSlug/'
   fileRoutesByTo: FileRoutesByTo
@@ -127,8 +147,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/svgs'
     | '/onboarding/success'
+    | '/settings/$settingsPage'
     | '/$projectSlug'
     | '/onboarding'
+    | '/settings'
     | '/$projectSlug/$serviceSlug/$serviceTab'
     | '/$projectSlug/$serviceSlug'
   id:
@@ -139,8 +161,10 @@ export interface FileRouteTypes {
     | '/svgs'
     | '/$projectSlug/$serviceSlug'
     | '/onboarding/success'
+    | '/settings/$settingsPage'
     | '/$projectSlug/'
     | '/onboarding/'
+    | '/settings/'
     | '/$projectSlug/$serviceSlug/$serviceTab'
     | '/$projectSlug/$serviceSlug/'
   fileRoutesById: FileRoutesById
@@ -151,7 +175,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SvgsRoute: typeof SvgsRoute
   OnboardingSuccessRoute: typeof OnboardingSuccessRoute
+  SettingsSettingsPageRoute: typeof SettingsSettingsPageRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -184,6 +210,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/onboarding/': {
       id: '/onboarding/'
       path: '/onboarding'
@@ -197,6 +230,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$projectSlug/'
       preLoaderRoute: typeof ProjectSlugIndexRouteImport
       parentRoute: typeof ProjectSlugRoute
+    }
+    '/settings/$settingsPage': {
+      id: '/settings/$settingsPage'
+      path: '/settings/$settingsPage'
+      fullPath: '/settings/$settingsPage'
+      preLoaderRoute: typeof SettingsSettingsPageRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/onboarding/success': {
       id: '/onboarding/success'
@@ -266,7 +306,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SvgsRoute: SvgsRoute,
   OnboardingSuccessRoute: OnboardingSuccessRoute,
+  SettingsSettingsPageRoute: SettingsSettingsPageRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
