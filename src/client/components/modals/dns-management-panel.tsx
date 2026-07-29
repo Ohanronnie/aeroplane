@@ -1,7 +1,5 @@
-import { ApiIcon } from "@hugeicons/core-free-icons";
 import { useEffect, useMemo, useState } from "react";
 import { api, type DnsSettingsStatus } from "../../api";
-import { SectionTitle } from "../ui/primitives";
 import {
   blankCredentials,
   createDnsConnections,
@@ -12,7 +10,6 @@ import {
 } from "./dns-management-data";
 import { DnsCredentialsForm } from "./dns-credentials-form";
 import { DnsProviderCard } from "./dns-provider-card";
-import { DnsProviderLogo } from "./dns-provider-logo";
 
 export function DnsManagementPanel() {
   const [selectedProviderId, setSelectedProviderId] = useState<DnsProviderId>("cloudflare");
@@ -31,6 +28,7 @@ export function DnsManagementPanel() {
   const selectedConnection = connections[selectedProvider.id];
   const editingSelectedProvider = editingProviderId === selectedProvider.id || !selectedConnection.connected;
   const selectedProviderBusy = busyProviderId === selectedProvider.id;
+  const connectedProviderCount = dnsProviders.filter((provider) => connections[provider.id].connected).length;
 
   function syncDnsSettings(dns: DnsSettingsStatus) {
     const nextConnections = createDnsConnections();
@@ -137,44 +135,66 @@ export function DnsManagementPanel() {
   }
 
   return (
-    <section className="space-y-5 border border-zinc-800 bg-zinc-950/30 p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <SectionTitle icon={ApiIcon} title="DNS Management API" meta="Provider credentials for automated DNS." />
-        <div className="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-          <DnsProviderLogo provider={selectedProvider} className="max-h-4 max-w-6" />
-          {selectedProvider.name}
+    <section className="mx-auto max-w-5xl overflow-hidden border border-white/10 bg-black">
+      <div className="grid min-h-[560px] lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="border-b border-white/10 bg-white/[0.02] lg:border-b-0 lg:border-r">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+            <span className="text-sm text-white">Providers</span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">
+              {connectedProviderCount} connected
+            </span>
+          </div>
+
+          <div className="p-2">
+            {dnsProviders.map((provider) => (
+              <DnsProviderCard
+                key={provider.id}
+                provider={provider}
+                selected={provider.id === selectedProvider.id}
+                connected={connections[provider.id].connected}
+                onSelect={() => selectProvider(provider.id)}
+              />
+            ))}
+          </div>
+        </aside>
+
+        <div className="min-w-0 p-5 sm:p-7 lg:p-8">
+          {loading ? (
+            <div className="space-y-5" aria-label="Loading DNS providers">
+              <div className="h-14 w-52 animate-pulse bg-white/5" />
+              <div className="grid max-w-xl gap-4">
+                {selectedProvider.fields.map((field) => (
+                  <div key={field.key} className="space-y-2">
+                    <div className="h-3 w-20 animate-pulse bg-white/5" />
+                    <div className="h-11 animate-pulse border border-white/10 bg-white/[0.03]" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              {credentialError && !editingSelectedProvider ? (
+                <div className="mb-5 border-l-2 border-white bg-white/[0.06] px-4 py-3 text-sm text-zinc-200">
+                  {credentialError}
+                </div>
+              ) : null}
+
+              <DnsCredentialsForm
+                provider={selectedProvider}
+                values={selectedCredentials}
+                connection={selectedConnection}
+                editing={editingSelectedProvider}
+                error={credentialError}
+                busy={selectedProviderBusy}
+                onChange={updateSelectedCredentials}
+                onSave={() => void saveSelectedCredentials()}
+                onEdit={() => setEditingProviderId(selectedProvider.id)}
+                onCancel={() => setEditingProviderId(null)}
+                onDisconnect={() => void disconnectSelectedProvider()}
+              />
+            </>
+          )}
         </div>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        {dnsProviders.map((provider) => (
-          <DnsProviderCard
-            key={provider.id}
-            provider={provider}
-            selected={provider.id === selectedProvider.id}
-            connected={connections[provider.id].connected}
-            onSelect={() => selectProvider(provider.id)}
-          />
-        ))}
-      </div>
-
-      {loading ? <div className="border border-zinc-800 bg-zinc-900/55 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">Loading DNS providers...</div> : null}
-      {credentialError && !editingSelectedProvider ? <div className="border border-rose-500/35 bg-rose-950/25 px-3 py-2 font-mono text-[10px] text-rose-200">{credentialError}</div> : null}
-
-      <div className="max-w-4xl">
-        <DnsCredentialsForm
-          provider={selectedProvider}
-          values={selectedCredentials}
-          connection={selectedConnection}
-          editing={editingSelectedProvider}
-          error={credentialError}
-          busy={selectedProviderBusy}
-          onChange={updateSelectedCredentials}
-          onSave={() => void saveSelectedCredentials()}
-          onEdit={() => setEditingProviderId(selectedProvider.id)}
-          onCancel={() => setEditingProviderId(null)}
-          onDisconnect={() => void disconnectSelectedProvider()}
-        />
       </div>
     </section>
   );
