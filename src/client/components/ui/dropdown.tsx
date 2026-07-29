@@ -13,7 +13,8 @@ export function Dropdown({
   onChange,
   disabled = false,
   placeholder = "Select...",
-  className = ""
+  className = "",
+  variant = "default"
 }: {
   value: string;
   options: DropdownOption[];
@@ -21,6 +22,7 @@ export function Dropdown({
   disabled?: boolean;
   placeholder?: string;
   className?: string;
+  variant?: "default" | "monochrome";
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -62,7 +64,11 @@ export function Dropdown({
                 key={option.value}
                 type="button"
                 className={`block w-full px-2.5 py-2 text-left text-sm transition ${
-                  active ? "bg-[#4FB8B2]/15 text-[#7fe3dd]" : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                  active
+                    ? variant === "monochrome"
+                      ? "bg-white text-black"
+                      : "bg-[#4FB8B2]/15 text-[#7fe3dd]"
+                    : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
                 }`}
                 onClick={() => {
                   onChange(option.value);
