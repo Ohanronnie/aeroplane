@@ -23,7 +23,7 @@ import { ProjectsEmptyState } from "../features/projects/projects-empty-state";
 import { ProjectsGridSkeleton } from "../features/projects/projects-grid-skeleton";
 import { SetupTodoList } from "../features/projects/setup-todo-list";
 import {
-  settingsPathForTab,
+  settingsPageForTab,
   type SystemSettingsTab,
 } from "../features/settings/settings-pages";
 import { serviceIsDeploying } from "../lib/deployment-status";
@@ -151,7 +151,10 @@ export function ProjectsPage() {
   }
 
   function openSystemSettings(tab: SystemSettingsTab = "root-domain") {
-    window.location.assign(settingsPathForTab(tab));
+    void navigate({
+      to: "/settings/$settingsPage",
+      params: { settingsPage: settingsPageForTab(tab).slug },
+    });
   }
 
   function openProject(project: ProjectCard) {
