@@ -1,15 +1,15 @@
 import {
+  AlertCircleIcon,
   CheckmarkCircle02Icon,
   CopyCheckIcon,
   CopyIcon,
   Delete02Icon,
-  Globe02Icon,
   PencilEdit02Icon,
   Refresh03Icon
 } from "@hugeicons/core-free-icons";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
-import { AppIcon, FieldLabel, FormInput, shellButton, statusClass } from "../ui/primitives";
+import { AppIcon, FieldLabel, FormInput } from "../ui/primitives";
 
 function cleanDomain(value: string) {
   return value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "").replace(/\.+$/, "");
@@ -30,6 +30,7 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
   const normalizedHostname = useMemo(() => cleanDomain(hostname), [hostname]);
   const hasSavedHostname = savedHostname.length > 0;
   const hasUnsavedChanges = normalizedHostname !== savedHostname;
+  const waitingForDns = success.startsWith("Still waiting");
 
   useEffect(() => {
     if (!open) return;
@@ -116,7 +117,7 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
       setHostname("");
       setSavedHostname("");
       setDnsStatus("pending");
-      setEditing(false);
+      setEditing(true);
       setSuccess("Dashboard domain removed.");
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : "Could not remove dashboard domain");
@@ -126,33 +127,29 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
   }
 
   return (
-    <section className="space-y-4 border border-zinc-800 bg-zinc-950/35 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd]">
-            <AppIcon icon={Globe02Icon} size={18} />
-          </div>
-          <div>
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Dashboard domain</div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h3 className="font-hero text-xl tracking-tight text-zinc-100">{hasSavedHostname ? savedHostname : "No dashboard domain"}</h3>
-              {hasSavedHostname ? (
-                <span className={`px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${statusClass(dnsStatus)}`}>
-                  {dnsStatus === "active" ? "DNS active" : "DNS pending"}
-                </span>
-              ) : null}
+    <section className="p-5 sm:p-7 lg:p-8">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl tracking-[-0.03em] text-white">Dashboard domain</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
+            The hostname used to access this Aeroplane control plane.
+          </p>
+          {hasSavedHostname && !editing ? (
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <span className="text-lg text-zinc-100">{savedHostname}</span>
+              <span className="inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">
+                <span className={`h-1.5 w-1.5 ${dnsStatus === "active" ? "bg-white" : "border border-zinc-600"}`} />
+                {dnsStatus === "active" ? "DNS active" : "DNS pending"}
+              </span>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-              Point a hostname at this server and Aeroplane will serve the dashboard through Caddy with HTTPS.
-            </p>
-          </div>
+          ) : null}
         </div>
 
         {hasSavedHostname && !editing ? (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-[#4FB8B2]/45 hover:bg-[#4FB8B2]/10 hover:text-[#7fe3dd]"
+              className="inline-flex h-10 w-10 items-center justify-center border border-white/15 text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.06] hover:text-white"
               onClick={() => setEditing(true)}
               title="Edit dashboard domain"
               aria-label="Edit dashboard domain"
@@ -161,7 +158,7 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
             </button>
             <button
               type="button"
-              className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-rose-500/45 hover:bg-rose-500/10 hover:text-rose-300"
+              className="inline-flex h-10 w-10 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.06] hover:text-white"
               onClick={() => void clearHostname()}
               title="Delete dashboard domain"
               aria-label="Delete dashboard domain"
@@ -173,7 +170,7 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
       </div>
 
       {editing ? (
-        <form onSubmit={saveSettings} className="space-y-3 border-t border-zinc-800 pt-4">
+        <form onSubmit={saveSettings} className="mt-7 max-w-xl">
           <div>
             <FieldLabel>Dashboard domain</FieldLabel>
             <FormInput
@@ -183,16 +180,22 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
               placeholder="pilot.aeroplane.run"
               inputMode="url"
               autoComplete="off"
+              variant="monochrome"
+              className="border-white/15 bg-white/[0.03]"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" className={shellButton("primary")} disabled={saving || !normalizedHostname || !hasUnsavedChanges}>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              className="inline-flex min-h-10 w-fit items-center justify-center bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={saving || !normalizedHostname || !hasUnsavedChanges}
+            >
               {saving ? "Saving..." : "Save dashboard domain"}
             </button>
             {hasSavedHostname ? (
               <button
                 type="button"
-                className={shellButton("ghost")}
+                className="inline-flex min-h-10 items-center justify-center border border-white/15 px-4 text-sm text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
                 onClick={() => {
                   setHostname(savedHostname);
                   setEditing(false);
@@ -206,20 +209,20 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
         </form>
       ) : null}
 
-      {hasSavedHostname ? (
-        <div className="overflow-hidden border border-zinc-800 bg-zinc-950/45 font-mono text-[11px]">
-          <div className="grid grid-cols-[88px_minmax(0,1fr)] border-b border-zinc-800">
-            <div className="border-r border-zinc-800 px-3 py-3 uppercase tracking-[0.18em] text-zinc-600">Type</div>
-            <div className="px-3 py-3 font-semibold text-zinc-100">A</div>
+      {hasSavedHostname && !editing ? (
+        <div className="mt-7 max-w-2xl border-y border-white/10 font-mono text-[10px]">
+          <div className="grid grid-cols-[100px_minmax(0,1fr)] border-b border-white/10">
+            <div className="py-3 uppercase tracking-[0.18em] text-zinc-600">Type</div>
+            <div className="py-3 text-zinc-200">A</div>
           </div>
-          <div className="grid grid-cols-[88px_minmax(0,1fr)] border-b border-zinc-800">
-            <div className="border-r border-zinc-800 px-3 py-3 uppercase tracking-[0.18em] text-zinc-600">Host</div>
-            <div className="px-3 py-3 font-semibold text-[#7fe3dd]">{savedHostname}</div>
+          <div className="grid grid-cols-[100px_minmax(0,1fr)] border-b border-white/10">
+            <div className="py-3 uppercase tracking-[0.18em] text-zinc-600">Host</div>
+            <div className="truncate py-3 text-zinc-200">{savedHostname}</div>
           </div>
-          <div className="grid grid-cols-[88px_minmax(0,1fr)]">
-            <div className="border-r border-zinc-800 px-3 py-3 uppercase tracking-[0.18em] text-zinc-600">Value</div>
-            <div className="flex min-w-0 items-center gap-2 px-3 py-3">
-              <span className="truncate font-semibold text-zinc-100">{publicIp}</span>
+          <div className="grid grid-cols-[100px_minmax(0,1fr)]">
+            <div className="py-3 uppercase tracking-[0.18em] text-zinc-600">Value</div>
+            <div className="flex min-w-0 items-center gap-2 py-3">
+              <span className="truncate text-zinc-200">{publicIp}</span>
               <button type="button" onClick={copyIp} className="shrink-0 p-0.5 text-zinc-500 transition-colors hover:text-zinc-200" title={copiedIp ? "Copied" : "Copy IP"}>
                 <AppIcon icon={copiedIp ? CopyCheckIcon : CopyIcon} size={13} />
               </button>
@@ -228,10 +231,10 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
         </div>
       ) : null}
 
-      {hasSavedHostname ? (
+      {hasSavedHostname && !editing ? (
         <button
           type="button"
-          className="inline-flex h-10 items-center justify-center gap-2 border border-zinc-700 bg-zinc-900 px-3.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-100 transition hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-55"
+          className="mt-5 inline-flex h-10 items-center justify-center gap-2 border border-white/15 px-3.5 text-sm text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void refreshSettings()}
           disabled={verifying}
         >
@@ -240,10 +243,16 @@ export function ControlPlaneDomainSettingsPanel({ open }: { open: boolean }) {
         </button>
       ) : null}
 
-      {error ? <div className="border border-rose-500/35 bg-rose-950/30 px-3.5 py-2.5 font-mono text-[10px] text-rose-300">{error}</div> : null}
+      {error ? <div className="mt-5 border-l-2 border-white bg-white/[0.06] px-4 py-3 text-sm text-zinc-200">{error}</div> : null}
       {success ? (
-        <div className="flex items-center gap-2 border border-emerald-500/35 bg-emerald-950/30 px-3.5 py-2.5 font-mono text-[10px] text-emerald-300">
-          <AppIcon icon={CheckmarkCircle02Icon} size={13} />
+        <div
+          className={
+            waitingForDns
+              ? "mt-5 flex items-center gap-2 border-l-2 border-amber-400 bg-amber-400/10 px-4 py-3 text-sm text-amber-200"
+              : "mt-5 flex items-center gap-2 border-l-2 border-emerald-400 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"
+          }
+        >
+          <AppIcon icon={waitingForDns ? AlertCircleIcon : CheckmarkCircle02Icon} size={14} />
           {success}
         </div>
       ) : null}
