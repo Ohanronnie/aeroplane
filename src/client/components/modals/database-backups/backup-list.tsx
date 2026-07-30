@@ -1,8 +1,6 @@
 import {
   Archive01Icon,
   ArchiveRestoreIcon,
-  Cancel01Icon,
-  CheckmarkCircle02Icon,
   Delete02Icon,
   Download01Icon,
   Refresh03Icon
@@ -17,13 +15,9 @@ type BackupListProps = {
   automaticEnabled: boolean;
   loading: boolean;
   busy: string;
-  deleteId: string;
-  restoreId: string;
   showRemoteStorageDetails: boolean;
   onDeletePrompt: (backupId: string) => void;
   onRestorePrompt: (backupId: string) => void;
-  onDelete: (backupId: string) => void;
-  onRestore: (backupId: string) => void;
 };
 
 function visibleStorageLabel(backup: DatabaseBackupRecord, showRemoteStorageDetails: boolean) {
@@ -31,128 +25,116 @@ function visibleStorageLabel(backup: DatabaseBackupRecord, showRemoteStorageDeta
   return backup.storage === "disk" ? storageLabel(backup.storage) : "Disk";
 }
 
+const backupActionClass = "inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-40";
+
 export function BackupList({
   serviceId,
   backups,
   automaticEnabled,
   loading,
   busy,
-  deleteId,
-  restoreId,
   showRemoteStorageDetails,
   onDeletePrompt,
-  onRestorePrompt,
-  onDelete,
-  onRestore
+  onRestorePrompt
 }: BackupListProps) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto border border-zinc-800 bg-zinc-950/45">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       {backups.length === 0 ? (
         <div className="flex min-h-full items-center justify-center p-8 text-center">
           <div>
-            <div className="mx-auto grid h-12 w-12 place-items-center border border-zinc-800 bg-zinc-900 text-zinc-500">
-              <AppIcon icon={Archive01Icon} size={20} />
-            </div>
-            <h4 className="mt-4 font-hero text-lg text-zinc-100">{loading ? "Loading backups" : "No backups yet"}</h4>
-            <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
-              {automaticEnabled
-                ? "Create a backup now, or let enabled automatic schedules run in the background."
-                : "Create a backup now, or turn on automatic backups from settings."}
-            </p>
+            <AppIcon icon={Archive01Icon} size={22} className="mx-auto text-zinc-700" />
+            <h3 className="mt-4 text-sm text-zinc-300">{loading ? "Loading backups…" : "No backups yet"}</h3>
+            {!loading ? (
+              <p className="mt-2 max-w-sm text-xs leading-5 text-zinc-600">
+                {automaticEnabled ? "Create one now or wait for the next scheduled backup." : "Create one now or enable a schedule in settings."}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : (
-        <div className="divide-y divide-zinc-800">
+        <>
+          <div className="hidden grid-cols-[minmax(0,1.25fr)_180px_170px_112px] border-b border-white/10 bg-white/[0.02] px-5 py-2.5 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600 lg:grid">
+            <span>Backup</span>
+            <span>Created</span>
+            <span>Storage</span>
+            <span className="text-right">Actions</span>
+          </div>
+
           {backups.map((backup) => {
             const deleting = busy === `delete:${backup.id}`;
             const restoring = busy === `restore:${backup.id}`;
             return (
-              <div key={backup.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <article
+                key={backup.id}
+                className="grid gap-3 border-b border-white/10 px-4 py-4 last:border-b-0 sm:px-5 lg:grid-cols-[minmax(0,1.25fr)_180px_170px_112px] lg:items-center"
+              >
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${backupStatusClass(backup.status)}`}>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={`shrink-0 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.14em] ${backupStatusClass(backup.status)}`}>
                       {backup.status}
                     </span>
-                    <span className="border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-                      {triggerLabel(backup.trigger)}
-                    </span>
-                    <span className="border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-                      {visibleStorageLabel(backup, showRemoteStorageDetails)}
-                    </span>
-                    <span className="border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-                      {formatBytes(backup.sizeBytes)}
-                    </span>
+                    <span className="truncate font-mono text-xs text-zinc-300">{backup.fileName ?? backup.id}</span>
                   </div>
-                  <div className="mt-3 truncate font-mono text-xs text-zinc-100">{backup.fileName ?? backup.id}</div>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[9px] uppercase tracking-[0.12em] text-zinc-600">
                     <span>{backup.engine}</span>
                     <span>{backup.format}</span>
-                    <span>{formatDate(backup.createdAt)}</span>
-                    {showRemoteStorageDetails && backup.r2Key ? <span className="normal-case tracking-normal text-[#7fe3dd]">{backup.r2Key}</span> : null}
+                    <span>{triggerLabel(backup.trigger)}</span>
                   </div>
-                  {backup.error ? <div className="mt-3 text-xs leading-relaxed text-rose-300">{backup.error}</div> : null}
+                  {backup.error ? <p className="mt-2 text-xs leading-5 text-rose-300">{backup.error}</p> : null}
                 </div>
 
-                <div className="flex flex-wrap items-start justify-end gap-2">
+                <div className="text-xs text-zinc-500">
+                  <span className="mr-2 font-mono text-[9px] uppercase tracking-[0.12em] text-zinc-700 lg:hidden">Created</span>
+                  {formatDate(backup.createdAt)}
+                </div>
+
+                <div className="min-w-0">
+                  <div className="text-xs text-zinc-400">
+                    {visibleStorageLabel(backup, showRemoteStorageDetails)} · {formatBytes(backup.sizeBytes)}
+                  </div>
+                  {showRemoteStorageDetails && backup.r2Key ? (
+                    <div className="mt-1 truncate font-mono text-[9px] text-zinc-600">{backup.r2Key}</div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center gap-1.5 lg:justify-end">
                   {backup.status === "succeeded" ? (
                     <>
                       <a
                         href={api.databaseBackupDownloadUrl(serviceId, backup.id)}
-                        className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-[#4FB8B2]/45 hover:bg-[#4FB8B2]/10 hover:text-[#7fe3dd]"
+                        className={backupActionClass}
                         title="Download backup"
                         aria-label="Download backup"
                       >
-                        <AppIcon icon={Download01Icon} size={15} />
+                        <AppIcon icon={Download01Icon} size={14} />
                       </a>
-                      {restoreId === backup.id ? (
-                        <div className="flex items-center gap-1 border border-amber-500/35 bg-amber-950/20 p-1">
-                          <span className="px-2 text-xs text-amber-100">Restore?</span>
-                          <button type="button" className="inline-flex h-8 w-8 items-center justify-center text-amber-100 hover:bg-amber-500/10" onClick={() => onRestore(backup.id)} disabled={restoring} title="Yes" aria-label="Yes">
-                            <AppIcon icon={restoring ? Refresh03Icon : CheckmarkCircle02Icon} size={15} className={restoring ? "animate-spin" : ""} />
-                          </button>
-                          <button type="button" className="inline-flex h-8 w-8 items-center justify-center text-zinc-300 hover:bg-zinc-800" onClick={() => onRestorePrompt("")} disabled={restoring} title="No" aria-label="No">
-                            <AppIcon icon={Cancel01Icon} size={15} />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-amber-500/45 hover:bg-amber-500/10 hover:text-amber-200"
-                          onClick={() => onRestorePrompt(backup.id)}
-                          title="Restore backup"
-                          aria-label="Restore backup"
-                        >
-                          <AppIcon icon={ArchiveRestoreIcon} size={15} />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className={`${backupActionClass} hover:border-amber-400/50 hover:bg-amber-400/10 hover:text-amber-300`}
+                        onClick={() => onRestorePrompt(backup.id)}
+                        disabled={restoring}
+                        title="Restore backup"
+                        aria-label="Restore backup"
+                      >
+                        <AppIcon icon={restoring ? Refresh03Icon : ArchiveRestoreIcon} size={14} className={restoring ? "animate-spin" : ""} />
+                      </button>
                     </>
                   ) : null}
-                  {deleteId === backup.id ? (
-                    <div className="flex items-center gap-1 border border-rose-500/35 bg-rose-950/20 p-1">
-                      <span className="px-2 text-xs text-rose-100">Delete?</span>
-                      <button type="button" className="inline-flex h-8 w-8 items-center justify-center text-rose-200 hover:bg-rose-500/10" onClick={() => onDelete(backup.id)} disabled={deleting} title="Yes" aria-label="Yes">
-                        <AppIcon icon={deleting ? Refresh03Icon : CheckmarkCircle02Icon} size={15} className={deleting ? "animate-spin" : ""} />
-                      </button>
-                      <button type="button" className="inline-flex h-8 w-8 items-center justify-center text-zinc-300 hover:bg-zinc-800" onClick={() => onDeletePrompt("")} disabled={deleting} title="No" aria-label="No">
-                        <AppIcon icon={Cancel01Icon} size={15} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-rose-500/45 hover:bg-rose-500/10 hover:text-rose-300"
-                      onClick={() => onDeletePrompt(backup.id)}
-                      title="Delete backup"
-                      aria-label="Delete backup"
-                    >
-                      <AppIcon icon={Delete02Icon} size={15} />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={`${backupActionClass} hover:border-rose-400/50 hover:bg-rose-400/10 hover:text-rose-300`}
+                    onClick={() => onDeletePrompt(backup.id)}
+                    disabled={deleting}
+                    title="Delete backup"
+                    aria-label="Delete backup"
+                  >
+                    <AppIcon icon={deleting ? Refresh03Icon : Delete02Icon} size={14} className={deleting ? "animate-spin" : ""} />
+                  </button>
                 </div>
-              </div>
+              </article>
             );
           })}
-        </div>
+        </>
       )}
     </div>
   );
