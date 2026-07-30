@@ -1,6 +1,7 @@
 import { LinkSquare02Icon } from "@hugeicons/core-free-icons";
 import type { BackupScheduleTrigger } from "../../api";
 import { AppIcon } from "../../components/ui/primitives";
+import { SquareSwitch } from "../../components/ui/square-switch";
 import type { OnboardingForm } from "./onboarding-types";
 
 const accountIdDocsUrl =
@@ -111,12 +112,8 @@ export function BackupConfiguration({
             const enabled =
               form.databaseBackupScheduleDefaults[option.trigger];
             return (
-              <button
+              <div
                 key={option.trigger}
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                onClick={() => updateSchedule(option.trigger, !enabled)}
                 className={`flex items-center justify-between gap-4 rounded-sm border px-4 py-3.5 text-left transition ${
                   enabled
                     ? "border-white/35 bg-white/10"
@@ -131,22 +128,12 @@ export function BackupConfiguration({
                     {option.retention}
                   </span>
                 </span>
-                <span
-                  className={`relative h-6 w-11 flex-none rounded-full border transition ${
-                    enabled
-                      ? "border-white bg-white"
-                      : "border-white/20 bg-black"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition ${
-                      enabled
-                        ? "left-[22px] bg-black"
-                        : "left-[3px] bg-zinc-600"
-                    }`}
-                  />
-                </span>
-              </button>
+                <SquareSwitch
+                  checked={enabled}
+                  onCheckedChange={(checked) => updateSchedule(option.trigger, checked)}
+                  label={`${enabled ? "Disable" : "Enable"} ${option.label.toLowerCase()} backups`}
+                />
+              </div>
             );
           })}
         </div>
@@ -216,11 +203,7 @@ export function BackupConfiguration({
           />
         </div>
 
-        <button
-          type="button"
-          role="switch"
-          aria-checked={form.r2CreateBucket}
-          onClick={() => update({ r2CreateBucket: !form.r2CreateBucket })}
+        <div
           className="mt-5 flex w-full items-start justify-between gap-5 border-y border-white/10 py-5 text-left"
         >
           <span>
@@ -231,22 +214,13 @@ export function BackupConfiguration({
               Check the R2 connection during setup when credentials are filled.
             </span>
           </span>
-          <span
-            className={`mt-0.5 relative h-6 w-11 flex-none rounded-full border transition ${
-              form.r2CreateBucket
-                ? "border-white bg-white"
-                : "border-white/20 bg-black"
-            }`}
-          >
-            <span
-              className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full transition ${
-                form.r2CreateBucket
-                  ? "left-[22px] bg-black"
-                  : "left-[3px] bg-zinc-600"
-              }`}
-            />
-          </span>
-        </button>
+          <SquareSwitch
+            checked={form.r2CreateBucket}
+            onCheckedChange={(checked) => update({ r2CreateBucket: checked })}
+            label={`${form.r2CreateBucket ? "Disable" : "Enable"} bucket creation and verification`}
+            className="mt-0.5"
+          />
+        </div>
       </section>
     </div>
   );
