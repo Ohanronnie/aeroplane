@@ -58,11 +58,7 @@ import {
   EnvironmentVariableSuggestions,
   type EnvironmentVariableSuggestionGroup
 } from "../../features/services/environment-variable-suggestions";
-
-type ParsedEnvEntry = {
-  key: string;
-  value: string;
-};
+import { parseEnvText, type ParsedEnvEntry } from "../../features/services/env-text-parser";
 
 type GitSourceMode = "github" | "url";
 
@@ -84,27 +80,6 @@ function nameFromGitUrl(value: string) {
   } catch {
     return "";
   }
-}
-
-function parseEnvText(input: string): ParsedEnvEntry[] {
-  const byKey = new Map<string, string>();
-
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-
-    const normalized = line.startsWith("export ") ? line.slice(7).trim() : line;
-    const separatorIndex = normalized.indexOf("=");
-    if (separatorIndex <= 0) continue;
-
-    const key = normalized.slice(0, separatorIndex).trim();
-    const value = normalized.slice(separatorIndex + 1).trim();
-    if (!/^[A-Z_][A-Z0-9_]*$/i.test(key)) continue;
-
-    byKey.set(key, value);
-  }
-
-  return Array.from(byKey.entries()).map(([key, value]) => ({ key, value }));
 }
 
 export function CreateServiceModal({
