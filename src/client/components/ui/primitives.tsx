@@ -64,7 +64,7 @@ export function deploymentCardClass(status: string, selected: boolean) {
 }
 
 export function FieldLabel({ children }: { children: ReactNode }) {
-  return <span className="mb-2 block font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{children}</span>;
+  return <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">{children}</span>;
 }
 
 export const FormInput = forwardRef<
