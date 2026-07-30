@@ -49,7 +49,7 @@ export function FunctionRuntimeDropdown({
     <div ref={rootRef} className={`relative ${className}`}>
       <button
         type="button"
-        className="flex h-11 w-full items-center justify-between gap-3 border border-zinc-700 bg-zinc-900 px-3 text-left text-sm text-zinc-100 outline-none transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex h-9 w-full items-center justify-between gap-3 border border-white/15 bg-black px-3 text-left text-xs text-zinc-300 outline-none transition hover:border-white/35 disabled:cursor-not-allowed disabled:opacity-60"
         onClick={() => setOpen((current) => !current)}
         onKeyDown={(event) => {
           if (event.key === "Escape") setOpen(false);
@@ -67,7 +67,7 @@ export function FunctionRuntimeDropdown({
 
       {open ? (
         <div
-          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-64 overflow-y-auto border border-zinc-700 bg-zinc-950 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-64 overflow-y-auto border border-white/15 bg-black p-1 shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
           role="listbox"
         >
           {functionRuntimes.map((runtime) => {
@@ -76,8 +76,8 @@ export function FunctionRuntimeDropdown({
               <button
                 key={runtime}
                 type="button"
-                className={`flex w-full items-center justify-between gap-3 px-2.5 py-2 text-left text-sm transition ${
-                  active ? "bg-[#4FB8B2]/15 text-[#7fe3dd]" : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                className={`flex w-full items-center justify-between gap-3 px-2.5 py-2 text-left text-xs transition ${
+                  active ? "bg-white text-black" : "text-zinc-400 hover:bg-white/[0.05] hover:text-white"
                 }`}
                 onClick={() => {
                   onChange(runtime);
