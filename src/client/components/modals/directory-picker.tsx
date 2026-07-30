@@ -1,7 +1,6 @@
 import { FolderOpenIcon } from "@hugeicons/core-free-icons";
 import type { GitHubDirectory } from "../../api";
 import { ModalShell } from "./modal-shell";
-import { shellButton } from "../ui/primitives";
 import { DirectoryTree } from "./directory-tree";
 
 type DirectoryPickerModalProps = {
@@ -30,14 +29,24 @@ export function DirectoryPickerModal({
   onSelect
 }: DirectoryPickerModalProps) {
   return (
-    <ModalShell open={open} onClose={onClose} icon={FolderOpenIcon} title="Choose directory" meta="Select the folder that contains this service." width="max-w-4xl">
-      <div className="space-y-5">
-        <div className="flex items-center justify-between gap-3 border border-zinc-700 bg-zinc-900/88 px-4 py-3">
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      icon={FolderOpenIcon}
+      title="Choose directory"
+      meta={repoLabel}
+      width="max-w-2xl"
+      minHeight="min-h-0"
+      bodyClassName="min-h-0 flex-1"
+      variant="monochrome"
+    >
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3 border border-white/10 px-3 py-2.5">
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400">Current directory</div>
-            <div className="mt-1 text-base text-zinc-100">{selectedPath || "."}</div>
+            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">Selected path</div>
+            <div className="mt-1 font-mono text-xs text-zinc-300">{selectedPath || "."}</div>
           </div>
-          <button type="button" className={shellButton("primary")} onClick={onClose}>
+          <button type="button" className="inline-flex h-8 items-center justify-center bg-white px-3 text-xs text-black transition hover:bg-zinc-200" onClick={onClose}>
             Done
           </button>
         </div>
