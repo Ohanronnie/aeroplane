@@ -1,0 +1,20 @@
+export type ServiceSettingsState = {
+  name: string;
+  repoFullName: string;
+  repoUrl: string;
+  dockerImage: string;
+  branch: string;
+  rootDir: string;
+  installCommand: string;
+  prebuildCommand: string;
+  buildCommand: string;
+  startCommand: string;
+  staticOutput: string;
+  buildMethod: "auto" | "railpack" | "dockerfile";
+  dockerfilePath: string;
+  runtimeMode: "web" | "worker";
+  internalPort: number;
+  databasePublicEnabled: boolean;
+  databasePublicHostname: string;
+  postgresLogicalReplicationEnabled: boolean;
+};
