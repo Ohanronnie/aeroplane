@@ -31,7 +31,7 @@ export function ProjectsDashboardSidebar({
   return (
     <aside className="relative z-20 flex items-center border-b border-white/10 bg-black px-5 py-4 lg:sticky lg:top-0 lg:h-dvh lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
       <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10">
+        <span className="grid h-10 w-10 place-items-center border border-white/20 bg-white/10">
           <BrandMark className="h-[18px] w-[18px] brightness-0 invert" />
         </span>
         <div>
@@ -45,7 +45,7 @@ export function ProjectsDashboardSidebar({
       </div>
 
       <nav aria-label="Dashboard" className="mt-10 hidden lg:block">
-        <p className="mb-3 px-3 font-mono text-[8px] font-semibold uppercase tracking-[0.2em] text-zinc-600">
+        <p className="mb-3 px-3 font-mono text-[8px] uppercase tracking-[0.2em] text-zinc-600">
           Workspace
         </p>
         <Link
@@ -74,11 +74,11 @@ export function ProjectsDashboardSidebar({
         ) : null}
 
         <div className="flex items-center gap-3 lg:mt-4 lg:border-t lg:border-white/10 lg:pt-4">
-          <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white text-xs font-bold text-black">
+          <span className="grid h-9 w-9 flex-none place-items-center bg-white text-xs text-black">
             {userInitials(currentUser)}
           </span>
           <span className="hidden min-w-0 flex-1 lg:block">
-            <span className="block truncate text-xs font-semibold text-white">
+            <span className="block truncate text-xs text-white">
               {currentUser?.name || "Aeroplane user"}
             </span>
             <span className="mt-0.5 block truncate font-mono text-[8px] uppercase tracking-[0.14em] text-zinc-600">
