@@ -1,36 +1,12 @@
-import { Add01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { Add01Icon, CopyIcon, Search01Icon } from "@hugeicons/core-free-icons";
 import { useState } from "react";
 import type { ClipboardEvent } from "react";
 import { api, type EnvVar } from "../../api";
 import { AutocompleteInput } from "../../components/ui/autocomplete-input";
-import { AppIcon, FieldLabel, FormInput, shellButton } from "../../components/ui/primitives";
+import { AppIcon, FormInput } from "../../components/ui/primitives";
 import { EnvVarRow } from "../../components/modals/env-var-row";
-
-type ParsedEnvEntry = {
-  key: string;
-  value: string;
-};
-
-function parseEnvText(input: string): ParsedEnvEntry[] {
-  const byKey = new Map<string, string>();
-
-  for (const rawLine of input.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-
-    const normalized = line.startsWith("export ") ? line.slice(7).trim() : line;
-    const separatorIndex = normalized.indexOf("=");
-    if (separatorIndex <= 0) continue;
-
-    const key = normalized.slice(0, separatorIndex).trim();
-    const value = normalized.slice(separatorIndex + 1).trim();
-    if (!/^[A-Z_][A-Z0-9_]*$/i.test(key)) continue;
-
-    byKey.set(key, value);
-  }
-
-  return Array.from(byKey.entries()).map(([key, value]) => ({ key, value }));
-}
+import { EnvPasteDialog } from "./env-paste-dialog";
+import { parseEnvText, type ParsedEnvEntry } from "./env-text-parser";
 
 export function ServiceVariablesPanel({
   serviceId,
@@ -48,6 +24,7 @@ export function ServiceVariablesPanel({
   const [envForm, setEnvForm] = useState({ key: "", value: "" });
   const [envSearch, setEnvSearch] = useState("");
   const [newEnvOpen, setNewEnvOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const filteredEnv = env.filter((item) => item.key.toLowerCase().includes(envSearch.trim().toLowerCase()));
 
   async function populateEnvEntries(entries: ParsedEnvEntry[]) {
@@ -55,6 +32,7 @@ export function ServiceVariablesPanel({
       await Promise.all(entries.map((entry) => api.upsertEnv(serviceId, entry)));
       setEnvForm({ key: "", value: "" });
       setNewEnvOpen(false);
+      setPasteOpen(false);
     });
   }
 
@@ -75,24 +53,47 @@ export function ServiceVariablesPanel({
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-4 border-b border-zinc-800 pb-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="text-2xl text-zinc-100">{env.length} Service Variables</div>
-          <div className="relative">
-            <AppIcon icon={Search01Icon} size={16} className="pointer-events-none absolute left-3 top-3 text-zinc-500" />
-            <FormInput value={envSearch} onChange={(event) => setEnvSearch(event.target.value)} placeholder="Search variables" className="w-64 pl-10" />
-          </div>
+    <section className="mx-auto max-w-5xl overflow-hidden border border-white/10 bg-black">
+      <header className="flex flex-col gap-4 border-b border-white/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl tracking-[-0.03em] text-white">Variables</h2>
+          <p className="mt-1.5 text-sm text-zinc-500">
+            {env.length} {env.length === 1 ? "variable" : "variables"}
+          </p>
         </div>
-        <button type="button" className={shellButton("secondary")} onClick={() => setNewEnvOpen((current) => !current)}>
-          <AppIcon icon={Add01Icon} size={16} />
-          New variable
-        </button>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-52 flex-1 sm:flex-none">
+            <AppIcon icon={Search01Icon} size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+            <FormInput
+              value={envSearch}
+              onChange={(event) => setEnvSearch(event.target.value)}
+              placeholder="Search"
+              variant="monochrome"
+              className="!h-9 w-full border-white/15 bg-white/[0.03] pl-9 text-sm sm:w-56"
+            />
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center justify-center gap-2 border border-white/15 px-3.5 text-sm text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
+            onClick={() => setPasteOpen(true)}
+          >
+            <AppIcon icon={CopyIcon} size={14} />
+            Paste .env
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center justify-center gap-2 bg-white px-3.5 text-sm text-black transition hover:bg-zinc-200"
+            onClick={() => setNewEnvOpen((current) => !current)}
+          >
+            <AppIcon icon={Add01Icon} size={14} />
+            New variable
+          </button>
+        </div>
+      </header>
 
       {newEnvOpen ? (
         <form
-          className="border border-zinc-700 bg-zinc-900/88 p-5"
+          className="border-b border-white/10 bg-white/[0.02] p-4 sm:px-5"
           autoComplete="off"
           onSubmit={(event) => {
             event.preventDefault();
@@ -103,21 +104,25 @@ export function ServiceVariablesPanel({
             });
           }}
         >
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_auto]">
-            <div>
-              <FieldLabel>Key</FieldLabel>
+          <div className="grid gap-3 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.4fr)_auto] lg:items-end">
+            <div className="space-y-1.5">
+              <label htmlFor="new-variable-key" className="block text-xs text-zinc-500">Key</label>
               <FormInput
+                id="new-variable-key"
                 value={envForm.key}
                 onChange={(event) => setEnvForm({ ...envForm, key: event.target.value })}
                 onPaste={handleEnvPaste}
                 placeholder="KEY"
                 autoComplete="off"
                 required
+                variant="monochrome"
+                className="!h-9 border-white/15 bg-black font-mono text-xs uppercase"
               />
             </div>
-            <div>
-              <FieldLabel>Value</FieldLabel>
+            <div className="space-y-1.5">
+              <label htmlFor="new-variable-value" className="block text-xs text-zinc-500">Value</label>
               <AutocompleteInput
+                id="new-variable-value"
                 type="text"
                 value={envForm.value}
                 onChange={(val) => setEnvForm({ ...envForm, value: val })}
@@ -125,13 +130,23 @@ export function ServiceVariablesPanel({
                 suggestions={suggestions}
                 placeholder="VALUE"
                 autoComplete="off"
+                variant="monochrome"
+                className="!h-9 border-white/15 bg-black font-mono text-xs"
               />
             </div>
-            <div className="flex items-end gap-2">
-              <button type="submit" className={shellButton("primary")} disabled={busy === "env"}>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="inline-flex h-9 items-center justify-center bg-white px-3.5 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                disabled={busy === "env"}
+              >
                 Save
               </button>
-              <button type="button" className={shellButton("ghost")} onClick={() => setNewEnvOpen(false)}>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center border border-white/15 px-3.5 text-sm text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05]"
+                onClick={() => setNewEnvOpen(false)}
+              >
                 Cancel
               </button>
             </div>
@@ -139,9 +154,18 @@ export function ServiceVariablesPanel({
         </form>
       ) : null}
 
-      <div className="border border-zinc-700 bg-zinc-900/88">
+      <div>
+        {filteredEnv.length > 0 ? (
+          <div className="hidden grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.4fr)_104px] gap-4 border-b border-white/10 bg-white/[0.02] px-5 py-2.5 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600 lg:grid">
+            <span>Key</span>
+            <span>Value</span>
+            <span className="text-right">Actions</span>
+          </div>
+        ) : null}
         {filteredEnv.length === 0 ? (
-          <div className="px-5 py-8 text-sm text-zinc-400">No service variables yet.</div>
+          <div className="px-5 py-12 text-center text-sm text-zinc-600">
+            {envSearch ? "No matching variables" : "No variables"}
+          </div>
         ) : (
           filteredEnv.map((item) => (
             <EnvVarRow
@@ -166,6 +190,13 @@ export function ServiceVariablesPanel({
           ))
         )}
       </div>
-    </div>
+
+      <EnvPasteDialog
+        open={pasteOpen}
+        busy={busy === "env"}
+        onClose={() => setPasteOpen(false)}
+        onImport={populateEnvEntries}
+      />
+    </section>
   );
 }
