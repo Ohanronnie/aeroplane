@@ -1,7 +1,7 @@
-import { ArrowLeft01Icon, AddSquareIcon, Settings01Icon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../../api";
-import { AppIcon, FieldLabel, FormInput, shellButton } from "../ui/primitives";
+import { AppIcon, FieldLabel, FormInput } from "../ui/primitives";
 import { getDatabaseOption, isPostgresFamilyDatabase, type DatabaseType, type EnvEntry } from "./database-service-options";
 import { generateDatabaseHostname } from "./database-hostname";
 
@@ -121,18 +121,13 @@ export function DatabaseConfigureStep({ dbType, onBack, onSubmit, busy }: Databa
   return (
     <form onSubmit={handleFormSubmit} className="flex min-h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-        <div className="space-y-5">
-          <div className="flex items-center gap-3 border border-zinc-800 bg-zinc-950/80 p-4 mb-4">
-            <div className="grid h-10 w-10 place-items-center border border-[#4FB8B2]/30 bg-[#4FB8B2]/10 text-[#7fe3dd]">
-              <AppIcon icon={Settings01Icon} size={18} />
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-zinc-100">Deploying {dbLabel}</h4>
-              <p className="text-xs text-zinc-400">Aeroplane creates private and public connection URLs automatically.</p>
-            </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 border border-white/10 px-3 py-2.5">
+            <span className="text-xs text-zinc-300">{dbLabel}</span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-600">New database</span>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             <div>
               <FieldLabel>Service name</FieldLabel>
               <FormInput
@@ -141,57 +136,56 @@ export function DatabaseConfigureStep({ dbType, onBack, onSubmit, busy }: Databa
                 placeholder={`${dbType}-db`}
                 required
                 disabled={busy}
+                variant="monochrome"
+                className="!h-9 border-white/15 bg-black text-xs"
               />
             </div>
             <div>
-              <FieldLabel>Database Port (Internal)</FieldLabel>
-              <div className="flex h-11 items-center border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-500 font-mono">
+              <FieldLabel>Internal port</FieldLabel>
+              <div className="flex h-9 items-center border border-white/10 px-3 font-mono text-xs text-zinc-500">
                 {defaultPort}
               </div>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid border border-white/10 md:grid-cols-2">
             <div>
-              <FieldLabel>Public hostname</FieldLabel>
-              <div className="flex h-11 min-w-0 items-center border border-zinc-800 bg-zinc-950 px-3 font-mono text-xs text-[#7fe3dd]">
+              <div className="border-b border-white/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-600 md:border-r">Public hostname</div>
+              <div className="flex h-9 min-w-0 items-center px-3 font-mono text-xs text-zinc-300 md:border-r">
                 <span className="truncate">{publicHostname || "Set root domain first"}</span>
               </div>
             </div>
             <div>
-              <FieldLabel>Public URL variable</FieldLabel>
-              <div className="flex h-11 min-w-0 items-center border border-zinc-800 bg-zinc-950 px-3 font-mono text-xs text-zinc-100">
+              <div className="border-b border-white/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-600">Public URL variable</div>
+              <div className="flex h-9 min-w-0 items-center px-3 font-mono text-xs text-zinc-300">
                 <span className="truncate">{isPostgresFamilyDatabase(dbType) ? "POSTGRES_PUBLIC_URL" : `${dbType.toUpperCase()}_PUBLIC_URL`}</span>
               </div>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 border-b border-zinc-800 pb-2">
-              <span className="text-sm font-medium text-zinc-100">Database details</span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">Database variables</span>
+              <span className="font-mono text-[9px] text-zinc-700">{envEntries.length} generated</span>
             </div>
 
-            <div className="overflow-hidden border border-zinc-800 bg-zinc-950/20">
+            <div className="overflow-hidden border border-white/10">
               {envEntries.length === 0 ? (
-                <div className="px-5 py-6 text-sm text-zinc-500 font-sans">No database details configured.</div>
+                <div className="px-3 py-5 text-xs text-zinc-500">No database variables configured.</div>
               ) : (
                 envEntries.map((item) => (
                   <div
                     key={item.key}
-                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-4 border-b border-zinc-800/80 px-4 py-3.5 last:border-b-0"
+                    className="grid gap-2 border-b border-white/10 px-3 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] sm:items-center"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="font-mono text-zinc-500 font-bold">{`{ }`}</span>
-                      <span className="truncate font-mono text-xs uppercase tracking-wider text-zinc-200">
-                        {item.key}
-                      </span>
-                    </div>
+                    <span className="truncate font-mono text-[10px] tracking-[0.08em] text-zinc-400">{item.key}</span>
                     <FormInput
                       value={item.value}
                       onChange={(event) => updateEnvValue(item.key, event.target.value)}
                       disabled={busy}
                       autoComplete="off"
-                      className="font-mono text-xs text-[#7fe3dd]"
+                      variant="monochrome"
+                      className="!h-8 border-white/15 bg-black font-mono text-xs"
                     />
                   </div>
                 ))
@@ -201,14 +195,13 @@ export function DatabaseConfigureStep({ dbType, onBack, onSubmit, busy }: Databa
         </div>
       </div>
 
-      <div className="mt-5 flex items-center justify-between gap-3 border-t border-zinc-800 pt-4 shrink-0">
-        <button type="button" className={shellButton("ghost")} onClick={onBack} disabled={busy}>
+      <div className="mt-4 flex shrink-0 items-center justify-between gap-3 border-t border-white/10 pt-4">
+        <button type="button" className="inline-flex h-8 items-center justify-center gap-2 px-3 text-xs text-zinc-500 transition hover:bg-white/[0.05] hover:text-white disabled:opacity-40" onClick={onBack} disabled={busy}>
           <AppIcon icon={ArrowLeft01Icon} size={16} />
           Back
         </button>
-        <button type="submit" className={shellButton("primary")} disabled={busy || !name.trim()}>
-          <AppIcon icon={AddSquareIcon} size={16} />
-          {busy ? "Deploying..." : "Deploy Database"}
+        <button type="submit" className="inline-flex h-8 items-center justify-center bg-white px-4 text-xs text-black transition hover:bg-zinc-200 disabled:opacity-40" disabled={busy || !name.trim()}>
+          {busy ? "Creating…" : "Create database"}
         </button>
       </div>
     </form>
