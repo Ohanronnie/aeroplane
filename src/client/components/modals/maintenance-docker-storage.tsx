@@ -1,6 +1,5 @@
 import type { SystemMaintenanceInfo } from "../../api";
 import { formatBytes } from "../../lib/format";
-import { statusClass } from "../ui/primitives";
 
 export function MaintenanceDockerStorage({
   info,
@@ -11,15 +10,18 @@ export function MaintenanceDockerStorage({
   loading: boolean;
   dockerMax: number;
 }) {
+  const available = Boolean(info?.docker.available);
+
   return (
-    <div className="border border-zinc-800 bg-zinc-950/45">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <h4 className="font-hero text-base tracking-tight text-zinc-100">Docker storage</h4>
-        <span className={`px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${info?.docker.available ? statusClass("active") : statusClass("failed")}`}>
-          {info?.docker.available ? "Available" : "Unavailable"}
+    <div className="border border-white/10 bg-black">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
+        <h3 className="text-sm text-zinc-100">Docker storage</h3>
+        <span className={`inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em] ${available ? "text-emerald-300" : "text-rose-300"}`}>
+          <span className={`h-1.5 w-1.5 ${available ? "bg-emerald-400" : "bg-rose-400"}`} />
+          {available ? "Available" : "Unavailable"}
         </span>
       </div>
-      <div className="divide-y divide-zinc-800">
+      <div className="divide-y divide-white/10">
         {(info?.docker.rows ?? []).length > 0 ? (
           info?.docker.rows.map((row) => {
             const percent = Math.max(2, Math.min(100, ((row.sizeBytes ?? 0) / dockerMax) * 100));
@@ -28,13 +30,13 @@ export function MaintenanceDockerStorage({
             return (
               <div key={row.type} className="grid gap-3 px-4 py-3 md:grid-cols-[160px_minmax(0,1fr)_240px] md:items-center">
                 <div>
-                  <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{row.type}</div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">{row.type}</div>
                   <div className="mt-1 text-xs text-zinc-500">
                     {row.activeCount ?? "?"}/{row.totalCount ?? "?"} active
                   </div>
                 </div>
-                <div className="h-2 border border-zinc-800 bg-black/45">
-                  <div className="h-full bg-zinc-500" style={{ width: `${percent}%` }} />
+                <div className="h-1 bg-white/10">
+                  <div className="h-full bg-white/50" style={{ width: `${percent}%` }} />
                 </div>
                 <div className="font-mono text-xs text-zinc-300">
                   {formatBytes(row.sizeBytes)}
@@ -48,7 +50,7 @@ export function MaintenanceDockerStorage({
         )}
       </div>
       {info?.docker.available && info.docker.reclaimableBytes > 0 ? (
-        <div className="border-t border-zinc-800 px-4 py-3 text-xs leading-relaxed text-zinc-500">
+        <div className="border-t border-white/10 px-4 py-3 text-xs leading-relaxed text-zinc-600">
           Docker can keep image layers listed as candidates after safe cleanup when running services still reference them.
         </div>
       ) : null}
