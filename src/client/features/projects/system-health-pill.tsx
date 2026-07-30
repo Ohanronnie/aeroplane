@@ -9,7 +9,7 @@ export function SystemHealthPill({ tools }: { tools: ToolCheck[] }) {
 
   return (
     <div
-      className="flex h-10 w-full items-center gap-2 border border-white/10 bg-white/5 px-3 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500"
+      className="flex h-10 w-full items-center gap-2 border border-white/10 bg-white/5 px-3 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-500"
       title={detail}
     >
       <span
