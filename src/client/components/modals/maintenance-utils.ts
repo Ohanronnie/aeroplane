@@ -1,6 +1,5 @@
 import type { MaintenanceCleanupTarget, SystemMaintenanceInfo } from "../../api";
 import { formatBytes } from "../../lib/format";
-import { statusClass } from "../ui/primitives";
 
 export const safeCleanupTargets = [
   "docker-containers",
@@ -21,13 +20,6 @@ export function healthLabel(info: SystemMaintenanceInfo | null) {
   if (!info) return "Not checked";
   if (info.alerts.length > 0) return `${info.alerts.length} issue${info.alerts.length === 1 ? "" : "s"}`;
   return "Healthy";
-}
-
-export function healthClass(info: SystemMaintenanceInfo | null) {
-  if (!info) return statusClass("unknown");
-  if (info.alerts.some((alert) => alert.includes("90%"))) return statusClass("failed");
-  if (info.alerts.length > 0) return statusClass("building");
-  return statusClass("active");
 }
 
 export function pathMetric(info: SystemMaintenanceInfo | null, id: string) {
