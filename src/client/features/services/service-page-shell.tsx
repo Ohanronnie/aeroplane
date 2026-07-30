@@ -1,7 +1,4 @@
 import {
-  ArrowLeft01Icon,
-  CheckmarkCircle02Icon,
-  Cancel01Icon,
   Delete02Icon,
   DatabaseIcon,
   FileCodeIcon,
@@ -9,7 +6,6 @@ import {
   GithubIcon,
   Globe02Icon,
   PackageIcon,
-  PencilEdit02Icon,
   LeftToRightListStarIcon,
   VariableIcon,
   VideoConsoleIcon,
@@ -28,13 +24,7 @@ import {
   type ServiceOverview,
   type ToolCheck
 } from "../../api";
-import {
-  AppIcon,
-  BrowserIconFallback,
-  FieldLabel,
-  FormInput,
-  shellButton
-} from "../../components/ui/primitives";
+import { AppIcon, BrowserIconFallback } from "../../components/ui/primitives";
 import { githubBranchesCache, githubDirectoriesCache, githubReposCache } from "../../lib/github-cache";
 import { DirectoryPickerModal } from "../../components/modals/directory-picker";
 import { SourcePickerModal } from "../../components/modals/source-picker";
@@ -58,9 +48,9 @@ import { FunctionSourcePanel } from "./function-source-panel";
 import { ServicePageSkeleton } from "./service-page-skeleton";
 import { RedeployRequiredToast } from "./redeploy-required-toast";
 import { ProjectsDashboardSidebar } from "../projects/projects-dashboard-sidebar";
-import { BuildMethodControl } from "../../components/ui/build-method-control";
-import { RuntimeModeControl } from "../../components/ui/runtime-mode-control";
 import type { ServiceTab } from "./service-tabs";
+import { ApplicationServiceSettingsPanel } from "./application-service-settings-panel";
+import type { ServiceSettingsState } from "./service-settings-state";
 import { dockerImageForService, dockerImageRepoFullName, isDatabaseService, isDockerImageService } from "../../../shared/service-source";
 import { isFunctionService } from "../../../shared/service-functions";
 import { deploymentIsPending, mergeDeploymentList } from "../../lib/deployment-status";
@@ -69,27 +59,6 @@ function textOrNull(value: string) {
   const trimmed = value.trim();
   return trimmed || null;
 }
-
-type ServiceSettingsState = {
-  name: string;
-  repoFullName: string;
-  repoUrl: string;
-  dockerImage: string;
-  branch: string;
-  rootDir: string;
-  installCommand: string;
-  prebuildCommand: string;
-  buildCommand: string;
-  startCommand: string;
-  staticOutput: string;
-  buildMethod: "auto" | "railpack" | "dockerfile";
-  dockerfilePath: string;
-  runtimeMode: "web" | "worker";
-  internalPort: number;
-  databasePublicEnabled: boolean;
-  databasePublicHostname: string;
-  postgresLogicalReplicationEnabled: boolean;
-};
 
 function formValue(form: HTMLFormElement, name: string, fallback: string) {
   const field = form.elements.namedItem(name);
@@ -798,8 +767,24 @@ export function ServicePageShell({
               ) : null}
 
               {selectedTab === "settings" ? (
-                <form onSubmit={saveSettings} className="space-y-5">
-                  <div className="grid gap-5 xl:grid-cols-2">
+                <form onSubmit={saveSettings} className="mx-auto w-full max-w-[1100px] overflow-visible border border-white/10 bg-black">
+                  <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-5">
+                    <div>
+                      <h2 className="text-lg tracking-[-0.03em] text-white">Settings</h2>
+                      <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">
+                        {isDatabase ? "Database service" : isDockerImage ? "Container service" : isFunction ? "Function service" : "Application service"}
+                      </p>
+                    </div>
+                    <button
+                      type="submit"
+                      className="inline-flex h-8 items-center justify-center bg-white px-3 text-xs text-black transition hover:bg-zinc-200 disabled:opacity-40"
+                      disabled={busy === "settings"}
+                    >
+                      {busy === "settings" ? "Saving…" : "Save settings"}
+                    </button>
+                  </header>
+
+                  <div className="grid gap-4 px-4 py-5 sm:px-5 xl:grid-cols-2">
                     {isDatabase ? (
                       <>
                         <DatabaseServiceSettingsPanel
@@ -821,170 +806,36 @@ export function ServicePageShell({
                         onChange={(nextSettings) => setSettings((current) => ({ ...current, ...nextSettings }))}
                       />
                     ) : (
-                      <>
-                        <div className="xl:col-span-2">
-                          <FieldLabel>Repository</FieldLabel>
-                          <div className="space-y-3 border border-zinc-700 bg-zinc-900/88 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="break-all text-[18px] text-zinc-100">{settings.repoFullName || settings.repoUrl || "Disconnected"}</div>
-                              <div className="flex items-center gap-2">
-                                <button type="button" className={shellButton("secondary")} onClick={() => setSourcePickerOpen(true)}>
-                                  <AppIcon icon={PencilEdit02Icon} size={15} />
-                                  Change source
-                                </button>
-                                <button
-                                  type="button"
-                                  className={shellButton("ghost")}
-                                  onClick={() => {
-                                    setSettings((current) => ({ ...current, repoFullName: "", repoUrl: "" }));
-                                    setSourceQuery("");
-                                    setSourceRepos([]);
-                                    setSourcePickerOpen(false);
-                                  }}
-                                >
-                                  <AppIcon icon={Cancel01Icon} size={15} />
-                                  Disconnect
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="relative">
-                          <FieldLabel>Branch</FieldLabel>
-                          {isGitUrlSource ? (
-                            <FormInput name="branch" value={settings.branch} onChange={(event) => setSettings((current) => ({ ...current, branch: event.target.value }))} placeholder="main" />
-                          ) : (
-                            <>
-                              <input type="hidden" name="branch" value={settings.branch} />
-                              <button
-                                type="button"
-                                className="flex h-11 w-full items-center justify-between border border-zinc-700 bg-zinc-900 px-3 text-left text-sm text-zinc-100"
-                                onClick={() => setBranchMenuOpen((current) => !current)}
-                                disabled={!settings.repoFullName}
-                              >
-                                <span>{settings.branch || "Select branch"}</span>
-                                <AppIcon icon={ArrowLeft01Icon} size={16} className={branchMenuOpen ? "rotate-90" : "-rotate-90"} />
-                              </button>
-                            </>
-                          )}
-                          {!isGitUrlSource && branchMenuOpen ? (
-                            <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-64 overflow-auto border border-zinc-700 bg-zinc-900 shadow-[0_20px_40px_rgba(0,0,0,0.35)]">
-                              {(settingsBranches.length ? settingsBranches : [settings.branch]).map((branch) => (
-                                <button
-                                  key={branch}
-                                  type="button"
-                                  className="flex w-full items-center justify-between border-b border-zinc-800 px-3 py-3 text-left text-sm text-zinc-100 last:border-b-0 hover:bg-zinc-800"
-                                  onClick={() => {
-                                    setSettings((current) => ({ ...current, branch }));
-                                    setBranchMenuOpen(false);
-                                    setSettingsDirectoryNodes({});
-                                    setSettingsExpandedDirectories(new Set());
-                                  }}
-                                >
-                                  <span>{branch}</span>
-                                  {settings.branch === branch ? <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#7fe3dd]">Current</span> : null}
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div>
-                          <FieldLabel>Directory</FieldLabel>
-                          {isGitUrlSource ? (
-                            <FormInput name="rootDir" value={settings.rootDir} onChange={(event) => setSettings((current) => ({ ...current, rootDir: event.target.value }))} placeholder="." />
-                          ) : (
-                            <>
-                              <input type="hidden" name="rootDir" value={settings.rootDir} />
-                              <div className="flex h-11 items-center justify-between gap-3 border border-zinc-700 bg-zinc-900 px-3">
-                                <div className="truncate text-sm text-zinc-100">{settings.rootDir || "."}</div>
-                                <button
-                                  type="button"
-                                  className="inline-flex h-9 items-center justify-center gap-2 border border-zinc-800 bg-zinc-900/70 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-60"
-                                  onClick={() => setDirectoryPickerOpen(true)}
-                                  disabled={!settings.repoFullName}
-                                >
-                                  <AppIcon icon={PencilEdit02Icon} size={15} />
-                                  Edit
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        <div>
-                          <FieldLabel>Service name</FieldLabel>
-                          <FormInput name="name" value={settings.name} onChange={(event) => setSettings((current) => ({ ...current, name: event.target.value }))} />
-                        </div>
-                        <div className="xl:col-span-2">
-                          <FieldLabel>Runtime mode</FieldLabel>
-                          <RuntimeModeControl
-                            value={settings.runtimeMode}
-                            onChange={(runtimeMode) => setSettings((current) => ({
-                              ...current,
-                              runtimeMode,
-                              staticOutput: runtimeMode === "worker" ? "" : current.staticOutput
-                            }))}
-                          />
-                        </div>
-                        {settings.runtimeMode !== "worker" ? (
-                          <div>
-                            <FieldLabel>App port</FieldLabel>
-                            <FormInput name="internalPort" type="number" value={settings.internalPort} onChange={(event) => setSettings((current) => ({ ...current, internalPort: Number(event.target.value) }))} />
-                          </div>
-                        ) : null}
-                        <div className="xl:col-span-2">
-                          <FieldLabel>Build method</FieldLabel>
-                          <BuildMethodControl
-                            value={settings.buildMethod}
-                            onChange={(buildMethod) => setSettings((current) => ({ ...current, buildMethod }))}
-                          />
-                          <p className="mt-2 text-xs leading-5 text-zinc-500">
-                            Auto uses your repository’s Dockerfile when one exists, otherwise Railpack builds the project.
-                          </p>
-                        </div>
-                        {settings.buildMethod !== "railpack" ? (
-                          <div>
-                            <FieldLabel>Dockerfile path</FieldLabel>
-                            <FormInput name="dockerfilePath" value={settings.dockerfilePath} onChange={(event) => setSettings((current) => ({ ...current, dockerfilePath: event.target.value }))} placeholder="Dockerfile" />
-                          </div>
-                        ) : (
-                          <input type="hidden" name="dockerfilePath" value={settings.dockerfilePath} />
-                        )}
-                        <div>
-                          <FieldLabel>Install command</FieldLabel>
-                          <FormInput name="installCommand" value={settings.installCommand} onChange={(event) => setSettings((current) => ({ ...current, installCommand: event.target.value }))} placeholder="auto" />
-                        </div>
-                        <div>
-                          <FieldLabel>Prebuild command</FieldLabel>
-                          <FormInput name="prebuildCommand" value={settings.prebuildCommand} onChange={(event) => setSettings((current) => ({ ...current, prebuildCommand: event.target.value }))} placeholder="none" />
-                        </div>
-                        <div>
-                          <FieldLabel>Build command</FieldLabel>
-                          <FormInput name="buildCommand" value={settings.buildCommand} onChange={(event) => setSettings((current) => ({ ...current, buildCommand: event.target.value }))} placeholder="auto" />
-                        </div>
-                        <div>
-                          <FieldLabel>Start command</FieldLabel>
-                          <FormInput name="startCommand" value={settings.startCommand} onChange={(event) => setSettings((current) => ({ ...current, startCommand: event.target.value }))} placeholder="auto" />
-                        </div>
-                        {settings.runtimeMode !== "worker" ? (
-                          <div>
-                            <FieldLabel>Static output</FieldLabel>
-                            <FormInput name="staticOutput" value={settings.staticOutput} onChange={(event) => setSettings((current) => ({ ...current, staticOutput: event.target.value }))} placeholder="auto" />
-                          </div>
-                        ) : (
-                          <input type="hidden" name="staticOutput" value={settings.staticOutput} />
-                        )}
-                      </>
+                      <ApplicationServiceSettingsPanel
+                        settings={settings}
+                        branches={settingsBranches}
+                        branchMenuOpen={branchMenuOpen}
+                        isGitUrlSource={isGitUrlSource}
+                        onChange={(nextSettings) => setSettings((current) => ({ ...current, ...nextSettings }))}
+                        onToggleBranchMenu={() => setBranchMenuOpen((current) => !current)}
+                        onSelectBranch={(branch) => {
+                          setSettings((current) => ({ ...current, branch }));
+                          setBranchMenuOpen(false);
+                          setSettingsDirectoryNodes({});
+                          setSettingsExpandedDirectories(new Set());
+                        }}
+                        onOpenSourcePicker={() => setSourcePickerOpen(true)}
+                        onDisconnectSource={() => {
+                          setSettings((current) => ({ ...current, repoFullName: "", repoUrl: "" }));
+                          setSourceQuery("");
+                          setSourceRepos([]);
+                          setSourcePickerOpen(false);
+                        }}
+                        onOpenDirectoryPicker={() => setDirectoryPickerOpen(true)}
+                      />
                     )}
                   </div>
 
-                  <div className="flex justify-between gap-3 border-t border-zinc-800 pt-5">
+                  <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-4 py-4 sm:px-5">
                     <div className="flex items-center gap-3">
                       {isDatabase ? (
-                        <div className="flex items-center gap-3 border border-zinc-700 bg-zinc-900/85 px-3 py-3 text-sm text-zinc-200">
-                          <BrowserIconFallback size={17} />
+                        <div className="flex h-8 items-center gap-2 text-xs text-zinc-500">
+                          <BrowserIconFallback size={14} />
                           <span className="truncate">
                             {service?.databasePublicHostname
                               ? `Public TCP ${service.databasePublicHostname}:${service.hostPort}`
@@ -992,8 +843,8 @@ export function ServicePageShell({
                           </span>
                         </div>
                       ) : isWorker && service?.reachable ? (
-                        <div className="flex items-center gap-3 border border-zinc-700 bg-zinc-900/85 px-3 py-3 text-sm text-zinc-200">
-                          <BrowserIconFallback size={17} />
+                        <div className="flex h-8 items-center gap-2 text-xs text-zinc-500">
+                          <BrowserIconFallback size={14} />
                           <span className="truncate">Worker process running</span>
                         </div>
                       ) : service?.reachable ? (
@@ -1001,38 +852,44 @@ export function ServicePageShell({
                           href={service.primaryUrl.replace("127.0.0.1", window.location.hostname)}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center gap-3 border border-zinc-700 bg-zinc-900/85 px-3 py-3 text-sm text-zinc-200 transition hover:border-[#4FB8B2]/45 hover:text-[#7fe3dd]"
+                          className="flex h-8 items-center gap-2 text-xs text-zinc-500 transition hover:text-white"
                         >
-                          <BrowserIconFallback size={17} />
+                          <BrowserIconFallback size={14} />
                           <span className="truncate">{service.primaryUrl.replace("127.0.0.1", window.location.hostname).replace(/^https?:\/\//, "")}</span>
                         </a>
                       ) : service?.status === "queued" || service?.status === "building" ? (
-                        <div className="flex items-center gap-3 border border-amber-500/20 bg-amber-950/20 px-3 py-3 text-sm text-amber-100">
-                          <BrowserIconFallback size={17} />
+                        <div className="flex h-8 items-center gap-2 text-xs text-amber-300">
+                          <BrowserIconFallback size={14} />
                           <span className="truncate">Deployment in progress</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3 border border-rose-500/20 bg-rose-950/20 px-3 py-3 text-sm text-rose-200">
-                          <BrowserIconFallback size={17} />
+                        <div className="flex h-8 items-center gap-2 text-xs text-rose-300">
+                          <BrowserIconFallback size={14} />
                           <span className="truncate">Service crashed</span>
                         </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button type="button" className={shellButton("secondary")} onClick={() => setTransferOpen(true)} disabled={transferDisabled}>
-                        <AppIcon icon={FolderOpenIcon} size={16} />
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center gap-2 border border-white/15 px-3 text-xs text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+                        onClick={() => setTransferOpen(true)}
+                        disabled={transferDisabled}
+                      >
+                        <AppIcon icon={FolderOpenIcon} size={13} />
                         Move service
                       </button>
-                      <button type="button" className={shellButton("danger")} onClick={() => setDeleteDialogOpen(true)} disabled={busy === "delete"}>
-                        <AppIcon icon={Delete02Icon} size={16} />
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-center gap-2 border border-rose-400/40 px-3 text-xs text-rose-300 transition hover:bg-rose-400/10 disabled:opacity-40"
+                        onClick={() => setDeleteDialogOpen(true)}
+                        disabled={busy === "delete"}
+                      >
+                        <AppIcon icon={Delete02Icon} size={13} />
                         Delete service
                       </button>
-                      <button type="submit" className={shellButton("primary")} disabled={busy === "settings"}>
-                        <AppIcon icon={CheckmarkCircle02Icon} size={16} />
-                        Save settings
-                      </button>
                     </div>
-                  </div>
+                  </footer>
                 </form>
               ) : null}
               </div>
