@@ -11,7 +11,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { Deployment, Domain, EnvVar, Service } from "../../api";
 import { DeployPlaneIcon } from "../../components/icons/deploy-plane-icon";
-import { AppIcon, FrameworkMark, StatusPill, shellButton } from "../../components/ui/primitives";
+import { AppIcon, FrameworkMark } from "../../components/ui/primitives";
 import { deploymentIsPending, displayDeploymentStatus } from "../../lib/deployment-status";
 import { formatRelativeTime, formatTime, shortSha } from "../../lib/format";
 import { formatBuildDuration } from "./service-format";
@@ -129,32 +129,50 @@ function warningItems({
 
 function OverviewStat({ label, value, meta }: OverviewStatProps) {
   return (
-    <div className="border border-zinc-800 bg-zinc-950/50 px-4 py-3">
-      <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">{label}</div>
-      <div className="mt-2 truncate text-sm font-medium text-zinc-100">{value}</div>
-      {meta ? <div className="mt-1 truncate text-xs text-zinc-500">{meta}</div> : null}
+    <div className="min-w-0 py-1">
+      <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">{label}</div>
+      <div className="mt-1.5 truncate text-sm text-zinc-200">{value}</div>
+      {meta ? <div className="mt-1 truncate text-xs text-zinc-600">{meta}</div> : null}
     </div>
   );
 }
 
 function SectionHeader({ icon, title, meta }: { icon: unknown; title: string; meta?: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3.5">
       <div className="flex min-w-0 items-center gap-2">
-        <AppIcon icon={icon} size={16} className="text-[#7fe3dd]" />
-        <h3 className="truncate font-mono text-xs font-semibold uppercase tracking-[0.18em] text-zinc-300">{title}</h3>
+        <AppIcon icon={icon} size={15} className="text-zinc-500" />
+        <h3 className="truncate text-sm text-zinc-200">{title}</h3>
       </div>
-      {meta ? <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-600">{meta}</span> : null}
+      {meta ? <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-600">{meta}</span> : null}
     </div>
   );
 }
 
 function DefinitionRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-2 border-b border-zinc-900/80 py-2.5 last:border-b-0 sm:grid-cols-[150px_minmax(0,1fr)]">
-      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-500">{label}</div>
+    <div className="grid gap-2 border-b border-white/10 py-2.5 last:border-b-0 sm:grid-cols-[130px_minmax(0,1fr)]">
+      <div className="text-xs text-zinc-600">{label}</div>
       <div className="min-w-0 truncate font-mono text-xs text-zinc-200">{value}</div>
     </div>
+  );
+}
+
+function StatusIndicator({ status }: { status: string }) {
+  const tone =
+    status === "active" || status === "running" || status === "deployed" || status === "success"
+      ? { text: "text-emerald-300", dot: "bg-emerald-400" }
+      : status === "building" || status === "queued"
+        ? { text: "text-amber-300", dot: "animate-pulse bg-amber-400" }
+        : status === "failed" || status === "crashed"
+          ? { text: "text-rose-300", dot: "bg-rose-400" }
+          : { text: "text-zinc-500", dot: "bg-zinc-600" };
+
+  return (
+    <span className={`inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.14em] ${tone.text}`}>
+      <span className={`h-1.5 w-1.5 ${tone.dot}`} />
+      {status}
+    </span>
   );
 }
 
@@ -188,30 +206,39 @@ export function ServiceOverviewPanel({
   const linkedServices = pageServices.filter((candidate) => candidate.id !== service.id && linkedSlugs.has(candidate.slug));
 
   return (
-    <div className="space-y-5">
-      <section className="border border-zinc-800 bg-zinc-950/50 p-5">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center border border-zinc-800 bg-zinc-900 p-2">
-                <FrameworkMark framework={service.framework} size={26} fallback={<AppIcon icon={isDatabase ? DatabaseIcon : isFunction ? FunctionIcon : isDockerImage ? PackageIcon : GithubIcon} size={22} className="text-zinc-300" />} />
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="truncate font-hero text-2xl font-extrabold tracking-tight text-zinc-100">{service.name}</h2>
-                  <StatusPill status={displayDeploymentStatus(service.status)} />
-                </div>
-                {link.href ? (
-                  <a className="mt-1 block truncate font-mono text-xs tracking-[0.16em] text-zinc-500 transition hover:text-[#7fe3dd]" href={link.href} target="_blank" rel="noreferrer">
-                    {link.label}
-                  </a>
-                ) : (
-                  <div className="mt-1 truncate font-mono text-xs tracking-[0.16em] text-zinc-500">{link.label}</div>
-                )}
-              </div>
+    <div className="space-y-4 pb-6">
+      <section className="overflow-hidden border border-white/10 bg-black">
+        <header className="flex flex-col gap-4 border-b border-white/10 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center border border-white/15 bg-white/[0.03] p-2">
+              <FrameworkMark framework={service.framework} size={22} fallback={<AppIcon icon={isDatabase ? DatabaseIcon : isFunction ? FunctionIcon : isDockerImage ? PackageIcon : GithubIcon} size={19} className="text-zinc-300" />} />
             </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="truncate text-xl tracking-[-0.03em] text-zinc-100">{service.name}</h2>
+                <StatusIndicator status={displayDeploymentStatus(service.status)} />
+              </div>
+              {link.href ? (
+                <a className="mt-1 block truncate text-xs text-zinc-500 transition hover:text-white" href={link.href} target="_blank" rel="noreferrer">
+                  {link.label}
+                </a>
+              ) : (
+                <div className="mt-1 truncate font-mono text-[10px] text-zinc-600">{link.label}</div>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-9 w-fit items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-50"
+            onClick={onDeploy}
+            disabled={busy === "deploy"}
+          >
+            <DeployPlaneIcon size={14} />
+            {busy === "deploy" ? "Deploying…" : "Deploy"}
+          </button>
+        </header>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-x-6 gap-y-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
               <OverviewStat label="Source" value={sourceLabel} meta={sourceMeta} />
               <OverviewStat label="Last deploy" value={service.lastDeployedAt ? formatRelativeTime(service.lastDeployedAt) : "Never"} meta={formatTime(service.lastDeployedAt)} />
               <OverviewStat label="Environment" value={`${env.length} variable${env.length === 1 ? "" : "s"}`} meta={env.length ? "Configured for deploy" : "No variables yet"} />
@@ -220,21 +247,14 @@ export function ServiceOverviewPanel({
                 value={isDatabase ? databaseEngine || "database" : isWorker ? "Worker" : String(service.internalPort)}
                 meta={isDatabase ? `Internal ${service.internalPort}` : isWorker ? "Process health" : `Host ${service.hostPort}`}
               />
-            </div>
-          </div>
-          <button type="button" className={`${shellButton("primary")} w-full lg:w-auto lg:min-w-40`} onClick={onDeploy} disabled={busy === "deploy"}>
-            <DeployPlaneIcon size={15} />
-            {busy === "deploy" ? "Deploying" : "Deploy"}
-          </button>
         </div>
       </section>
 
       {warnings.length > 0 ? (
-        <section className="border border-amber-500/25 bg-amber-950/10 p-4">
-          <SectionHeader icon={Alert02Icon} title="Needs Attention" meta={`${warnings.length}`} />
+        <section className="border-l-2 border-amber-400 bg-amber-400/[0.08] px-4 py-3">
           <div className="grid gap-2 md:grid-cols-2">
             {warnings.map((warning) => (
-              <div key={warning} className="flex items-center gap-2 text-sm text-amber-100/90">
+              <div key={warning} className="flex items-center gap-2 text-sm text-amber-200">
                 <AppIcon icon={Alert02Icon} size={14} className="shrink-0 text-amber-300" />
                 <span>{warning}</span>
               </div>
@@ -242,61 +262,82 @@ export function ServiceOverviewPanel({
           </div>
         </section>
       ) : (
-        <section className="border border-emerald-500/20 bg-emerald-950/10 p-4">
-          <div className="flex items-center gap-2 text-sm text-emerald-100/90">
+        <section className="border-l-2 border-emerald-400 bg-emerald-400/[0.07] px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-emerald-200">
             <AppIcon icon={CheckmarkCircle02Icon} size={15} className="text-emerald-300" />
-            <span>No obvious issues detected from the latest service state.</span>
+            <span>Service health looks good.</span>
           </div>
         </section>
       )}
 
-      <section className="border border-zinc-800 bg-zinc-950/45 p-5">
+      <section className="border border-white/10 bg-black">
         <SectionHeader icon={PackageIcon} title="Latest Deployment" meta={latestStatus} />
         {latestDeployment ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <div className="grid gap-x-6 gap-y-4 px-4 py-4 sm:grid-cols-3">
               <OverviewStat label="Status" value={latestStatus} meta={latestDeployment.trigger} />
               <OverviewStat label={isDockerImage ? "Image" : "Commit"} value={isDockerImage ? latestDeployment.imageTag ?? sourceLabel : shortSha(latestDeployment.commitSha)} meta={isDockerImage ? latestDeployment.trigger : latestDeployment.imageTag ?? "image pending"} />
               <OverviewStat label="Duration" value={latestDuration ?? "Unknown"} meta={formatTime(latestDeployment.createdAt)} />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={shellButton("secondary")} onClick={() => onTabChange("deployments")}>
+            <div className="flex flex-wrap gap-2 border-t border-white/10 px-4 py-3">
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center border border-white/15 px-3 text-xs text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05]"
+                onClick={() => onTabChange("deployments")}
+              >
                 View deploy output
               </button>
               {latestDeployment.status === "failed" ? (
-                <button type="button" className={shellButton("primary")} onClick={onDeploy} disabled={busy === "deploy"}>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center bg-white px-3 text-xs text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                  onClick={onDeploy}
+                  disabled={busy === "deploy"}
+                >
                   Redeploy
                 </button>
               ) : null}
             </div>
           </div>
         ) : (
-          <div className="border border-dashed border-zinc-800 bg-zinc-950/50 p-6 text-sm text-zinc-500">No deployments yet. Deploy this service to populate the timeline.</div>
+          <div className="px-4 py-8 text-center text-sm text-zinc-600">No deployments yet.</div>
         )}
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-3">
-        <section className="border border-zinc-800 bg-zinc-950/45 p-5">
+      <div className="grid gap-4 xl:grid-cols-3">
+        <section className="border border-white/10 bg-black">
           <SectionHeader icon={VariableIcon} title="Environment Readiness" />
-          <div className="space-y-3">
+          <div className="space-y-3 p-4">
             <OverviewStat label="Configured" value={`${env.length} variable${env.length === 1 ? "" : "s"}`} meta={env.length ? `${env.filter((item) => item.hasValue).length} with values` : "No variables yet"} />
             <div className="flex flex-wrap gap-2">
               {env.slice(0, 8).map((item) => (
-                <span key={item.id} className="border border-zinc-800 bg-zinc-900/70 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-zinc-300">
+                <span key={item.id} className="border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] text-zinc-400">
                   {item.key}
                 </span>
               ))}
-              {env.length > 8 ? <span className="border border-zinc-800 bg-zinc-900/70 px-2 py-1 font-mono text-[10px] text-zinc-500">+{env.length - 8}</span> : null}
+              {env.length > 8 ? <span className="border border-white/10 px-2 py-1 font-mono text-[9px] text-zinc-500">+{env.length - 8}</span> : null}
             </div>
-            <button type="button" className={shellButton("secondary")} onClick={() => onTabChange("environment")}>
+            <button
+              type="button"
+              className="inline-flex h-8 items-center justify-center border border-white/15 px-3 text-xs text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05]"
+              onClick={() => onTabChange("environment")}
+            >
               Edit variables
             </button>
           </div>
         </section>
 
-        <section className="border border-zinc-800 bg-zinc-950/45 p-5">
+        <section className="border border-white/10 bg-black">
           <SectionHeader icon={Settings01Icon} title="Runtime Config" />
-          {isDockerImage ? (
+          <div className="px-4 py-1.5">
+          {isDatabase ? (
+            <div>
+              <DefinitionRow label="Engine" value={databaseEngine || "database"} />
+              <DefinitionRow label="Internal port" value={String(service.internalPort)} />
+              <DefinitionRow label="Host port" value={String(service.hostPort)} />
+              <DefinitionRow label="Public access" value={service.databasePublicEnabled ? "Enabled" : "Disabled"} />
+            </div>
+          ) : isDockerImage ? (
             <div>
               <DefinitionRow label="Mode" value={isWorker ? "Background worker" : "Web service"} />
               <DefinitionRow label="Docker image" value={sourceLabel} />
@@ -315,39 +356,40 @@ export function ServiceOverviewPanel({
               {!isWorker ? <DefinitionRow label="Static output" value={valueOrAuto(service.staticOutput)} /> : null}
             </div>
           )}
+          </div>
         </section>
 
-        <section className="border border-zinc-800 bg-zinc-950/45 p-5">
+        <section className="border border-white/10 bg-black">
           <SectionHeader icon={DatabaseIcon} title="Linked Services" meta={`${linkedServices.length}`} />
           {linkedServices.length > 0 ? (
-            <div className="space-y-2">
+            <div className="divide-y divide-white/10 px-4">
               {linkedServices.map((linkedService) => (
-                <div key={linkedService.id} className="flex items-center justify-between gap-3 border border-zinc-800 bg-zinc-900/55 px-3 py-2.5">
+                <div key={linkedService.id} className="flex items-center justify-between gap-3 py-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="grid h-7 w-7 shrink-0 place-items-center border border-zinc-800 bg-zinc-950 p-1.5">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center p-1.5">
                       <FrameworkMark framework={linkedService.framework} size={16} fallback={<AppIcon icon={DatabaseIcon} size={14} className="text-zinc-400" />} />
                     </span>
                     <span className="truncate text-sm text-zinc-200">{linkedService.name}</span>
                   </div>
-                  <StatusPill status={displayDeploymentStatus(linkedService.status)} />
+                  <StatusIndicator status={displayDeploymentStatus(linkedService.status)} />
                 </div>
               ))}
             </div>
           ) : (
-            <div className="border border-dashed border-zinc-800 bg-zinc-950/50 p-4 text-sm leading-6 text-zinc-500">
+            <div className="p-4 text-sm leading-6 text-zinc-600">
               No <code className="font-mono text-zinc-400">{"${service.variable}"}</code> references detected in this service’s variables.
             </div>
           )}
         </section>
       </div>
 
-      <section className="border border-zinc-800 bg-zinc-950/45 p-5">
+      <section className="border border-white/10 bg-black">
         <SectionHeader icon={Clock01Icon} title="Recent Activity" meta={`${deployments.length} deployments`} />
         {deployments.length > 0 ? (
-          <div className="divide-y divide-zinc-900">
+          <div className="divide-y divide-white/10 px-4">
             {deployments.slice(0, 5).map((deployment) => (
               <div key={deployment.id} className="grid gap-3 py-3 md:grid-cols-[120px_minmax(0,1fr)_120px_110px] md:items-center">
-                <StatusPill status={displayDeploymentStatus(deployment.status)} />
+                <StatusIndicator status={displayDeploymentStatus(deployment.status)} />
                 <div className="min-w-0 truncate font-mono text-xs text-zinc-300">{isDockerImage ? deployment.imageTag ?? sourceLabel : shortSha(deployment.commitSha)}</div>
                 <div className="font-mono text-xs text-zinc-500">{deployment.trigger}</div>
                 <div className="font-mono text-xs text-zinc-500">{formatRelativeTime(deployment.createdAt)}</div>
@@ -355,7 +397,7 @@ export function ServiceOverviewPanel({
             ))}
           </div>
         ) : (
-          <div className="text-sm text-zinc-500">No deployment activity yet.</div>
+          <div className="px-4 py-8 text-center text-sm text-zinc-600">No deployment activity yet.</div>
         )}
       </section>
     </div>
