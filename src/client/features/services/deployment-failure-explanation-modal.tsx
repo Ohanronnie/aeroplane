@@ -129,67 +129,70 @@ export function DeploymentFailureExplanationModal({
       meta={deployment ? `Deployment ${shortSha(deployment.commitSha)}` : undefined}
       icon={AiBrain01Icon}
       onClose={onClose}
-      width="max-w-4xl"
+      width="max-w-3xl"
+      minHeight="min-h-0"
+      variant="monochrome"
     >
-      {aiProviders.length > 0 ? (
-        <DeploymentFailureModelPicker
-          providers={aiProviders}
-          selectedProviderId={selectedProviderId}
-          selectedModel={selectedModel}
-          disabled={loading || !selectedProvider}
-          onSelect={changeProviderModel}
-        />
-      ) : null}
+      <div className="space-y-4">
+        {aiProviders.length > 0 ? (
+          <DeploymentFailureModelPicker
+            providers={aiProviders}
+            selectedProviderId={selectedProviderId}
+            selectedModel={selectedModel}
+            disabled={loading || !selectedProvider}
+            onSelect={changeProviderModel}
+          />
+        ) : null}
 
-      {loading ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="border border-zinc-800 bg-zinc-900/55 px-4 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500"
-        >
-          {loadingMessages[loadingMessageIndex]}
-        </div>
-      ) : null}
+        {loading ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="border border-white/10 bg-white/[0.02] px-3 py-2.5 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500"
+          >
+            {loadingMessages[loadingMessageIndex]}
+          </div>
+        ) : null}
 
-      {error ? (
-        <div className="flex items-start gap-3 border border-rose-500/35 bg-rose-950/25 px-4 py-3 text-sm leading-6 text-rose-100">
-          <AppIcon icon={AlertCircleIcon} size={17} className="mt-0.5 shrink-0" />
-          <div>{error}</div>
-        </div>
-      ) : null}
+        {error ? (
+          <div className="flex items-start gap-3 border border-rose-500/35 bg-rose-500/10 px-3 py-2.5 text-xs leading-5 text-rose-200">
+            <AppIcon icon={AlertCircleIcon} size={17} className="mt-0.5 shrink-0" />
+            <div>{error}</div>
+          </div>
+        ) : null}
 
-      {explanation ? (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border border-zinc-800 bg-zinc-950/45 px-4 py-3">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        {explanation ? (
+          <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-white/10 bg-white/[0.02] px-3 py-2.5">
+            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">
               {explanation.providerName} / {explanation.model}
             </div>
-            <span className={`px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${statusClass(confidenceStatus(explanation.confidence))}`}>
+            <span className={`px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em] ${statusClass(confidenceStatus(explanation.confidence))}`}>
               {explanation.confidence} confidence
             </span>
           </div>
 
-          <section className="border border-zinc-800 bg-zinc-950/45 p-4">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Summary</div>
-            <p className="mt-2 text-sm leading-6 text-zinc-100">{explanation.summary}</p>
+          <section className="border border-white/10 p-4">
+            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">Summary</div>
+            <p className="mt-2 text-sm leading-6 text-zinc-300">{explanation.summary}</p>
           </section>
 
-          <section className="border border-zinc-800 bg-zinc-950/45 p-4">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Likely cause</div>
-            <p className="mt-2 text-sm leading-6 text-zinc-100">{explanation.cause}</p>
+          <section className="border border-white/10 p-4">
+            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">Likely cause</div>
+            <p className="mt-2 text-sm leading-6 text-zinc-300">{explanation.cause}</p>
           </section>
 
-          <section className="border border-[#4FB8B2]/30 bg-[#4FB8B2]/10 p-4">
-            <div className="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#7fe3dd]">
-              <AppIcon icon={CheckmarkCircle02Icon} size={15} />
+          <section className="border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-300">
+              <AppIcon icon={CheckmarkCircle02Icon} size={13} />
               Suggested fix
             </div>
-            <p className="mt-2 text-sm leading-6 text-zinc-100">{explanation.suggestedFix}</p>
+            <p className="mt-2 text-sm leading-6 text-emerald-100">{explanation.suggestedFix}</p>
           </section>
 
           {explanation.commands.length > 0 ? (
-            <section className="border border-zinc-800 bg-zinc-950/45 p-4">
-              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Commands / changes</div>
+            <section className="border border-white/10 p-4">
+              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">Commands / changes</div>
               <div className="mt-3 space-y-2">
                 {explanation.commands.map((command, index) => (
                   <DeploymentFailureCommand key={`${command}-${index}`} command={command} />
@@ -199,15 +202,16 @@ export function DeploymentFailureExplanationModal({
           ) : null}
 
           {explanation.relatedLogLines.length > 0 ? (
-            <section className="border border-zinc-800 bg-zinc-950/45 p-4">
-              <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Relevant logs</div>
-              <pre className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap break-all border border-zinc-800 bg-zinc-900/70 px-3 py-2 font-mono text-xs leading-5 text-zinc-300">
+            <section className="border border-white/10 p-4">
+              <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">Relevant logs</div>
+              <pre className="mt-3 max-h-44 overflow-y-auto whitespace-pre-wrap break-all border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-xs leading-5 text-zinc-400">
                 {explanation.relatedLogLines.join("\n")}
               </pre>
             </section>
           ) : null}
-        </div>
-      ) : null}
+          </div>
+        ) : null}
+      </div>
     </ModalShell>
   );
 }
