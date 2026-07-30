@@ -1,8 +1,10 @@
-import { PackageIcon } from "@hugeicons/core-free-icons";
 import { useMemo } from "react";
 import { validateDockerImageReference } from "../../../shared/service-source";
-import { AppIcon, FieldLabel, FormInput, SectionTitle } from "../ui/primitives";
+import { FormInput } from "../ui/primitives";
 import { RuntimeModeControl } from "../ui/runtime-mode-control";
+
+const settingsLabelClass = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600";
+const settingsInputClass = "!h-9 border-white/15 bg-black text-xs";
 
 type DockerImageServiceSettings = {
   name: string;
@@ -24,21 +26,19 @@ export function DockerImageServiceSettingsPanel({
 
   return (
     <>
-      <div className="xl:col-span-2">
-        <SectionTitle icon={PackageIcon} title="Docker Image" meta="Run a prebuilt container image" />
-      </div>
       <div>
-        <FieldLabel>Service name</FieldLabel>
-        <FormInput name="name" value={settings.name} onChange={(event) => onChange({ name: event.target.value })} required />
+        <label htmlFor="docker-service-name" className={settingsLabelClass}>Service name</label>
+        <FormInput id="docker-service-name" name="name" value={settings.name} onChange={(event) => onChange({ name: event.target.value })} required variant="monochrome" className={settingsInputClass} />
       </div>
       <div className="xl:col-span-2">
-        <FieldLabel>Runtime mode</FieldLabel>
+        <span className={settingsLabelClass}>Runtime mode</span>
         <RuntimeModeControl value={settings.runtimeMode} onChange={(runtimeMode) => onChange({ runtimeMode })} />
       </div>
       {settings.runtimeMode !== "worker" ? (
         <div>
-          <FieldLabel>Internal port</FieldLabel>
+          <label htmlFor="docker-service-port" className={settingsLabelClass}>Internal port</label>
           <FormInput
+            id="docker-service-port"
             type="number"
             min={1}
             max={65535}
@@ -46,6 +46,8 @@ export function DockerImageServiceSettingsPanel({
             value={settings.internalPort}
             onChange={(event) => onChange({ internalPort: Number(event.target.value) })}
             required
+            variant="monochrome"
+            className={settingsInputClass}
           />
           {hostPort ? <p className="mt-2 text-xs text-zinc-500">Traffic is routed through host port {hostPort}.</p> : null}
         </div>
@@ -53,20 +55,13 @@ export function DockerImageServiceSettingsPanel({
         <input type="hidden" name="internalPort" value={settings.internalPort} />
       )}
       <div className="xl:col-span-2">
-        <FieldLabel>Image reference</FieldLabel>
-        <div className="flex items-center gap-3 border border-zinc-700 bg-zinc-900/88 p-4">
-          <span className="grid h-10 w-10 shrink-0 place-items-center border border-zinc-800 bg-zinc-950 text-zinc-300">
-            <AppIcon icon={PackageIcon} size={18} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <FormInput name="dockerImage" value={settings.dockerImage} onChange={(event) => onChange({ dockerImage: event.target.value })} placeholder="ghcr.io/org/app:latest" required />
-            {settings.dockerImage.trim() && !imageValidation.ok ? (
-              <p className="mt-2 text-xs text-rose-300">{imageValidation.error}</p>
-            ) : (
-              <p className="mt-2 text-xs text-zinc-500">Private images use the host Docker daemon's registry login.</p>
-            )}
-          </div>
-        </div>
+        <label htmlFor="docker-image-reference" className={settingsLabelClass}>Image reference</label>
+        <FormInput id="docker-image-reference" name="dockerImage" value={settings.dockerImage} onChange={(event) => onChange({ dockerImage: event.target.value })} placeholder="ghcr.io/org/app:latest" required variant="monochrome" className={`${settingsInputClass} font-mono`} />
+        {settings.dockerImage.trim() && !imageValidation.ok ? (
+          <p className="mt-2 text-xs text-rose-300">{imageValidation.error}</p>
+        ) : (
+          <p className="mt-2 text-xs text-zinc-500">Private images use the host Docker daemon's registry login.</p>
+        )}
       </div>
     </>
   );
