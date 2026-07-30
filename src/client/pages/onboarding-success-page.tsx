@@ -1,15 +1,15 @@
 import {
   ArrowRight02Icon,
-  CheckmarkCircle02Icon,
-  CloudUploadIcon,
+  CheckmarkSquare02Icon,
   DatabaseBackup,
-  GithubIcon,
   Globe02Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useMemo, useState } from "react";
 import { api, type AuthStatus, type GitHubStatus, type R2SettingsStatus } from "../api";
+import cloudflareLogoUrl from "../assets/dns-providers/cloudflare.svg";
 import { BrandMark } from "../components/ui/brand-mark";
+import { GitHubLogo } from "../components/ui/github-logo";
 import { AppIcon } from "../components/ui/primitives";
 import {
   OnboardingSuccessSummaryRow,
@@ -123,7 +123,7 @@ export function OnboardingSuccessPage() {
       <div className="relative z-10 grid min-h-dvh lg:grid-cols-[minmax(360px,0.82fr)_minmax(560px,1.18fr)]">
         <section className="relative flex min-h-[480px] flex-col overflow-hidden border-b border-white/10 px-6 py-7 sm:px-10 lg:min-h-dvh lg:border-b-0 lg:border-r lg:px-16 lg:py-8">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-white/10">
+            <span className="grid h-10 w-10 place-items-center border border-white/20 bg-white/10">
               <BrandMark className="h-[18px] w-[18px] brightness-0 invert" />
             </span>
             <div>
@@ -137,10 +137,10 @@ export function OnboardingSuccessPage() {
           </div>
 
           <div className="relative z-10 my-auto py-16">
-            <span className="grid h-16 w-16 place-items-center rounded-full bg-white text-black shadow-[0_0_60px_rgba(255,255,255,0.12)]">
-              <AppIcon icon={CheckmarkCircle02Icon} size={27} />
+            <span className="grid h-16 w-16 place-items-center bg-white text-black shadow-[0_0_60px_rgba(255,255,255,0.12)]">
+              <AppIcon icon={CheckmarkSquare02Icon} size={27} />
             </span>
-            <p className="mt-8 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+            <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
               Setup complete · 05 / 05
             </p>
             <h1 className="mt-3 max-w-sm font-hero text-4xl leading-tight tracking-[-0.055em] sm:text-5xl">
@@ -165,14 +165,14 @@ export function OnboardingSuccessPage() {
           <div className="w-full max-w-2xl">
             <div className="mb-7 flex items-end justify-between gap-4">
               <div>
-                <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-zinc-500">
                   Flight check
                 </p>
                 <h2 className="mt-2 font-hero text-2xl tracking-[-0.04em]">
                   Configuration summary
                 </h2>
               </div>
-              <span className="rounded-full border border-white/15 px-3 py-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+              <span className="border border-white/15 px-3 py-1.5 font-mono text-[8px] uppercase tracking-[0.14em] text-zinc-400">
                 Saved
               </span>
             </div>
@@ -225,7 +225,7 @@ export function OnboardingSuccessPage() {
                     )}
                   />
                   <OnboardingSuccessSummaryRow
-                    icon={GithubIcon}
+                    logo={<GitHubLogo className="h-[17px] w-[17px]" />}
                     label="GitHub"
                     value={
                       githubStatus?.appConfigured
@@ -244,7 +244,7 @@ export function OnboardingSuccessPage() {
                     )}
                   />
                   <OnboardingSuccessSummaryRow
-                    icon={CloudUploadIcon}
+                    logo={<img src={cloudflareLogoUrl} alt="" aria-hidden="true" className="max-h-4 max-w-6 object-contain" />}
                     label="Cloudflare R2"
                     value={
                       r2Status?.connected
@@ -280,17 +280,17 @@ export function OnboardingSuccessPage() {
               type="button"
               disabled={loading}
               onClick={() => window.location.assign(dashboardUrl)}
-              className="group mt-8 flex h-14 w-full items-center justify-between rounded-sm bg-white px-5 text-left text-black transition hover:bg-zinc-200 disabled:opacity-50"
+              className="group mt-8 flex h-14 w-full items-center justify-between bg-white px-5 text-left text-black transition hover:bg-zinc-200 disabled:opacity-50"
             >
               <span>
-                <span className="block font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-600">
+                <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">
                   Setup saved
                 </span>
-                <span className="mt-0.5 block text-sm font-semibold">
+                <span className="mt-0.5 block text-sm">
                   Open {dashboardDnsActive ? "custom domain" : "dashboard"}
                 </span>
               </span>
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-black/10 transition-transform group-hover:translate-x-1">
+              <span className="grid h-8 w-8 place-items-center bg-black/10 transition-transform group-hover:translate-x-1">
                 <AppIcon icon={ArrowRight02Icon} size={16} />
               </span>
             </button>
