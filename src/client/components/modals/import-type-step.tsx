@@ -1,60 +1,52 @@
-import { ArrowLeft01Icon, CloudServerIcon, FunctionIcon, GithubIcon, PackageIcon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { AppIcon } from "../ui/primitives";
+import { ServiceTypeIcon, type ServiceType } from "./service-type-icon";
 
-export type ServiceType = "git" | "database" | "docker-image" | "function";
+export type { ServiceType } from "./service-type-icon";
 
 type ServiceTypeOption = {
   key: ServiceType;
   name: string;
-  icon: unknown;
 };
 
 const SERVICE_TYPE_OPTIONS: ServiceTypeOption[] = [
   {
     key: "git",
-    name: "Git Repository",
-    icon: GithubIcon
+    name: "Git Repository"
   },
   {
     key: "database",
-    name: "Database",
-    icon: CloudServerIcon
+    name: "Database"
   },
   {
     key: "docker-image",
-    name: "Docker Image",
-    icon: PackageIcon
+    name: "Docker Image"
   },
   {
     key: "function",
-    name: "Function",
-    icon: FunctionIcon
+    name: "Function"
   }
 ];
 
 export function ImportTypeStep({ onSelect }: { onSelect: (type: ServiceType) => void }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-center px-1 py-6">
-      <div className="mb-6 shrink-0">
-        <h3 className="font-hero text-xl font-bold tracking-tight text-zinc-100">Select service type</h3>
-        <p className="mt-2 font-mono text-xs uppercase tracking-widest text-zinc-400">Choose the source of your deployment</p>
-      </div>
-
-      <div className="mx-auto w-full max-w-2xl overflow-hidden border border-zinc-800 bg-zinc-900/45">
+    <div className="min-h-0 flex-1">
+      <div className="grid border border-white/10 sm:grid-cols-2">
         {SERVICE_TYPE_OPTIONS.map((option) => (
           <button
             key={option.key}
             type="button"
             onClick={() => onSelect(option.key)}
-            className="group grid w-full grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-4 border-b border-zinc-800 px-4 py-3.5 text-left transition last:border-b-0 hover:border-[#4FB8B2]/25 hover:bg-[#4FB8B2]/6 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-[#4FB8B2]/45"
+            className="group flex min-h-20 items-center gap-3 border-b border-white/10 px-4 py-3 text-left transition last:border-b-0 hover:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-inset focus:ring-white/30 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0"
           >
-            <span className="grid h-11 w-11 place-items-center border border-zinc-800 bg-zinc-950 text-zinc-300 transition group-hover:border-[#4FB8B2]/40 group-hover:bg-[#4FB8B2]/10 group-hover:text-[#7fe3dd]">
-              <AppIcon icon={option.icon} size={20} />
+            <span className="grid h-8 w-8 shrink-0 place-items-center text-zinc-500 transition group-hover:text-white">
+              <ServiceTypeIcon
+                type={option.key}
+                className={option.key === "docker-image" ? "h-6 w-6 object-contain" : "h-5 w-5"}
+              />
             </span>
-            <span className="min-w-0 truncate font-hero text-base font-bold text-zinc-100 transition group-hover:text-[#7fe3dd]">{option.name}</span>
-            <span className="grid h-8 w-8 place-items-center border border-zinc-800 text-zinc-500 transition group-hover:border-[#4FB8B2]/30 group-hover:text-[#7fe3dd]">
-              <AppIcon icon={ArrowLeft01Icon} size={15} className="rotate-180" />
-            </span>
+            <span className="min-w-0 flex-1 truncate text-sm text-zinc-300 transition group-hover:text-white">{option.name}</span>
+            <AppIcon icon={ArrowLeft01Icon} size={14} className="rotate-180 text-zinc-700 transition group-hover:text-zinc-300" />
           </button>
         ))}
       </div>
