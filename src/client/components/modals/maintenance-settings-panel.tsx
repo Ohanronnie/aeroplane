@@ -68,6 +68,14 @@ export function MaintenanceSettingsPanel({ open }: { open: boolean }) {
       : info.alerts.length > 0
         ? "bg-amber-400"
         : "bg-emerald-400";
+  const checkedAt = info
+    ? new Date(info.checkedAt).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -75,7 +83,11 @@ export function MaintenanceSettingsPanel({ open }: { open: boolean }) {
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-5 sm:px-7">
           <div>
             <h2 className="text-xl tracking-[-0.03em] text-white">Host health</h2>
-            <p className="mt-1.5 text-sm text-zinc-500">Disk, Docker, logs, and build artifacts.</p>
+            <p className="mt-1.5 text-sm text-zinc-500">
+              {checkedAt
+                ? `Checked ${checkedAt} · ${info?.history.length ?? 0} history samples`
+                : "Disk, Docker, logs, and build artifacts."}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <span className={`inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em] ${healthTone}`}>
@@ -114,7 +126,7 @@ export function MaintenanceSettingsPanel({ open }: { open: boolean }) {
 
       <MaintenanceSummaryGrid info={info} loading={loading} />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-3">
         <MaintenanceHistoryChart history={info?.history ?? []} metric="disk" label="Disk trend" />
         <MaintenanceHistoryChart history={info?.history ?? []} metric="docker" label="Docker reclaimable trend" />
         <MaintenanceHistoryChart history={info?.history ?? []} metric="builds" label="Build artifact trend" />
