@@ -1,9 +1,8 @@
-import { Add01Icon, Cancel01Icon, CheckmarkCircle02Icon, DatabaseImportIcon, Delete02Icon, PencilEdit02Icon, Refresh03Icon } from "@hugeicons/core-free-icons";
+import { Add01Icon, Cancel01Icon, CheckmarkCircle02Icon, Delete02Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { api, type DatabaseDataImport, type DatabaseRow, type DatabaseRowsResponse, type DatabaseRuntimeState, type DatabaseTable } from "../../api";
-import { Dropdown } from "../ui/dropdown";
-import { AppIcon, FormInput, shellButton } from "../ui/primitives";
+import { AppIcon } from "../ui/primitives";
 import { DatabaseInsertSheet } from "./database-insert-sheet";
 import { DatabaseImportStatusBanner } from "./database-import-status-banner";
 import { RedisDeleteKeyModal } from "./redis-delete-key-modal";
@@ -12,6 +11,8 @@ import { RedisHashTable } from "./redis-hash-table";
 import { RedisKeyActionsMenu } from "./redis-key-actions-menu";
 import { RedisTtlPopover } from "./redis-ttl-popover";
 import { DatabaseRuntimeStatePanel } from "./database-runtime-state-panel";
+import { RedisBrowserToolbar } from "./redis-browser-toolbar";
+import { RedisKeyList } from "./redis-key-list";
 
 type RedisInsertMode = "key" | "item";
 
@@ -42,27 +43,7 @@ function itemCountLabel(table: DatabaseTable | null) {
   return `${numberFormatter.format(table.rowCount)} item${table.rowCount === 1 ? "" : "s"}`;
 }
 
-function redisTypeTextClass(type: string) {
-  if (type === "string") return "text-[#9af4ee]";
-  if (type === "set") return "text-emerald-300";
-  if (type === "hash") return "text-amber-300";
-  if (type === "list") return "text-sky-300";
-  if (type === "zset") return "text-violet-300";
-  return "text-zinc-500";
-}
-
-function redisTypeBadgeClass(type: string) {
-  if (type === "string") return "border-[#4FB8B2]/30 bg-[#4FB8B2]/10 text-[#9af4ee]";
-  if (type === "set") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-  if (type === "hash") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-  if (type === "list") return "border-sky-500/30 bg-sky-500/10 text-sky-300";
-  if (type === "zset") return "border-violet-500/30 bg-violet-500/10 text-violet-300";
-  return "border-zinc-700 bg-zinc-900/80 text-zinc-400";
-}
-
-const redisMetaPillClass = "inline-flex h-7 items-center border px-2.5 font-mono text-[11px] leading-none tracking-[0.04em]";
-const redisToolbarDropdownClass = "w-28 [&>button]:!h-9";
-const redisToolbarTypeClass = "w-44 [&>button]:!h-9";
+const redisMetaPillClass = "inline-flex h-7 items-center border border-white/10 bg-white/[0.03] px-2.5 font-mono text-[10px] leading-none tracking-[0.04em] text-zinc-500";
 
 function redisContentText(type: string, rows: DatabaseRow[]) {
   if (type === "string") return valueText(rows[0]?.value);
@@ -108,7 +89,7 @@ function redisEditDraft(type: string, row: DatabaseRow): Record<string, string> 
   return { value: redisItemValue(type, row) };
 }
 
-const redisInlineInputClass = "h-8 min-w-0 border border-zinc-700 bg-zinc-900 px-2 font-mono text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-[#4FB8B2]/60";
+const redisInlineInputClass = "h-8 min-w-0 border border-white/15 bg-black px-2 font-mono text-xs text-zinc-100 outline-none transition placeholder:text-zinc-700 focus:border-white";
 
 function RedisItems({
   type,
@@ -146,19 +127,19 @@ function RedisItems({
     const editing = editingItemId === "string";
 
     return (
-      <div className="relative min-h-0 flex-1 overflow-auto border border-zinc-700 bg-zinc-950 p-4">
+      <div className="relative min-h-0 flex-1 overflow-auto border border-white/10 bg-white/[0.015] p-4">
         {editing ? (
           <div className="flex h-full min-h-48 flex-col gap-3">
             <textarea
               value={editDraft.value ?? ""}
               onChange={(event) => setEditDraft((current) => ({ ...current, value: event.target.value }))}
-              className="min-h-0 flex-1 resize-none border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm leading-6 text-zinc-100 outline-none transition focus:border-[#4FB8B2]/60"
+              className="min-h-0 flex-1 resize-none border border-white/15 bg-black px-3 py-2 font-mono text-xs leading-6 text-zinc-100 outline-none transition focus:border-white"
               spellCheck={false}
             />
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd] transition hover:bg-[#4FB8B2]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 w-8 items-center justify-center bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => void saveItem(stringRow)}
                 disabled={saving}
                 title="Save value"
@@ -168,7 +149,7 @@ function RedisItems({
               </button>
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center border border-zinc-800 bg-zinc-900/70 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => {
                   setEditingItemId("");
                   setEditDraft({});
@@ -185,7 +166,7 @@ function RedisItems({
           <>
             <button
               type="button"
-              className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center border border-zinc-800 bg-zinc-900/70 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-100"
+              className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
               onClick={() => {
                 setEditingItemId("string");
                 setEditDraft(redisEditDraft("string", stringRow));
@@ -195,7 +176,7 @@ function RedisItems({
             >
               <AppIcon icon={PencilEdit02Icon} size={14} />
             </button>
-            <pre className="whitespace-pre-wrap break-words pr-12 font-mono text-sm leading-6 text-emerald-200">{prettyValue(stringRow.value)}</pre>
+            <pre className="whitespace-pre-wrap break-words pr-12 font-mono text-xs leading-6 text-zinc-300">{prettyValue(stringRow.value)}</pre>
           </>
         )}
       </div>
@@ -221,7 +202,7 @@ function RedisItems({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto border border-zinc-700 bg-zinc-950">
+    <div className="min-h-0 flex-1 overflow-auto border border-white/10 bg-white/[0.015]">
       {rows.length === 0 ? (
         <div className="flex h-full min-h-48 items-center justify-center px-5 text-center text-sm text-zinc-500">No items in this key.</div>
       ) : rows.map((row, index) => {
@@ -230,7 +211,7 @@ function RedisItems({
         const editing = editingItemId === itemId;
 
         return (
-          <div key={itemId} className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3 text-sm text-zinc-200">
+          <div key={itemId} className="flex items-center gap-3 border-b border-white/10 px-4 py-3 text-xs text-zinc-300 last:border-b-0">
             {editing ? (
               <>
                 <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -249,7 +230,7 @@ function RedisItems({
                       placeholder="member"
                     />
                   ) : type === "list" ? (
-                    <span className="inline-flex max-w-48 shrink-0 items-center border border-zinc-800 bg-zinc-900/70 px-2 py-1 font-mono text-[11px] tracking-[0.08em] text-zinc-500">
+                    <span className="inline-flex max-w-48 shrink-0 items-center border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[10px] tracking-[0.08em] text-zinc-600">
                       <span className="truncate">{redisItemMeta(type, row)}</span>
                     </span>
                   ) : null}
@@ -263,7 +244,7 @@ function RedisItems({
                 <div className="flex shrink-0 items-center justify-end gap-2">
                   <button
                     type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd] transition hover:bg-[#4FB8B2]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => void saveItem(row)}
                     disabled={saving}
                     title="Save item"
@@ -273,7 +254,7 @@ function RedisItems({
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center border border-zinc-800 bg-zinc-900/70 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => {
                       setEditingItemId("");
                       setEditDraft({});
@@ -290,14 +271,14 @@ function RedisItems({
               <>
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   {type !== "set" ? (
-                    <span className="inline-flex max-w-48 shrink-0 items-center border border-zinc-800 bg-zinc-900/70 px-2 py-1 font-mono text-[11px] tracking-[0.08em] text-zinc-500">
+                    <span className="inline-flex max-w-48 shrink-0 items-center border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[10px] tracking-[0.08em] text-zinc-600">
                       <span className="truncate">{redisItemMeta(type, row)}</span>
                     </span>
                   ) : null}
-                  <span className="min-w-0 break-words font-mono text-sm text-zinc-200">{redisItemValue(type, row)}</span>
+                  <span className="min-w-0 break-words font-mono text-xs text-zinc-300">{redisItemValue(type, row)}</span>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
-                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-200">Confirm delete?</span>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-rose-300">Confirm delete?</span>
                   <button
                     type="button"
                     className="inline-flex h-8 w-8 items-center justify-center border border-rose-500/35 bg-rose-500/10 text-rose-200 transition hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-50"
@@ -313,7 +294,7 @@ function RedisItems({
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center border border-zinc-800 bg-zinc-900/70 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => setConfirmingDeleteId("")}
                     disabled={deleting}
                     title="No, cancel delete"
@@ -327,16 +308,16 @@ function RedisItems({
               <>
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   {type !== "set" ? (
-                    <span className="inline-flex max-w-48 shrink-0 items-center border border-zinc-800 bg-zinc-900/70 px-2 py-1 font-mono text-[11px] tracking-[0.08em] text-zinc-500">
+                    <span className="inline-flex max-w-48 shrink-0 items-center border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[10px] tracking-[0.08em] text-zinc-600">
                       <span className="truncate">{redisItemMeta(type, row)}</span>
                     </span>
                   ) : null}
-                  <span className="min-w-0 break-words font-mono text-sm text-zinc-200">{redisItemValue(type, row)}</span>
+                  <span className="min-w-0 break-words font-mono text-xs text-zinc-300">{redisItemValue(type, row)}</span>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
                   <button
                     type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center border border-zinc-800 bg-zinc-900/70 text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => {
                       setConfirmingDeleteId("");
                       setEditingItemId(itemId);
@@ -350,7 +331,7 @@ function RedisItems({
                   </button>
                   <button
                     type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center border border-zinc-800 bg-zinc-900/70 text-zinc-400 transition hover:border-rose-500/35 hover:bg-rose-950/25 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-rose-400/50 hover:bg-rose-400/10 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => setConfirmingDeleteId(itemId)}
                     disabled={deleting}
                     title="Delete item"
@@ -681,70 +662,51 @@ export function RedisBrowserPanel({ serviceId }: { serviceId: string }) {
   const hasRuntimeNotice = runtimeState !== "ready";
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Dropdown value={selectedDatabase} options={redisDatabaseOptions} onChange={changeDatabase} className={redisToolbarDropdownClass} />
-        <Dropdown value={typeFilter} options={typeOptions} onChange={setTypeFilter} className={redisToolbarTypeClass} />
-        <FormInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search keys" className="!h-9 min-w-64 flex-1" />
-        <button type="button" className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-zinc-500 hover:text-white" onClick={() => void loadKeys(selectedDatabase)} disabled={busy === "keys"} aria-label="Refresh keys">
-          <AppIcon icon={Refresh03Icon} size={16} className={busy === "keys" ? "animate-spin" : ""} />
-        </button>
-        <button type="button" className={`${shellButton("secondary")} h-9 !py-0`} onClick={() => setImportOpen(true)} disabled={hasRuntimeNotice || busy === "keys"}>
-          <AppIcon icon={DatabaseImportIcon} size={15} />
-          Import
-        </button>
-        <button type="button" className={`${shellButton("primary")} h-9 !py-0`} onClick={openAddKey} disabled={busy === "insert" || hasRuntimeNotice}>
-          <AppIcon icon={Add01Icon} size={15} />
-          Key
-        </button>
-      </div>
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-[1440px] flex-col overflow-hidden border border-white/10 bg-black">
+      <RedisBrowserToolbar
+        selectedDatabase={selectedDatabase}
+        databaseOptions={redisDatabaseOptions}
+        typeFilter={typeFilter}
+        typeOptions={typeOptions}
+        search={search}
+        keyCount={keys.length}
+        loading={busy === "keys"}
+        disabled={hasRuntimeNotice || busy === "keys"}
+        onDatabaseChange={changeDatabase}
+        onTypeChange={setTypeFilter}
+        onSearchChange={setSearch}
+        onRefresh={() => void loadKeys(selectedDatabase)}
+        onImport={() => setImportOpen(true)}
+        onAddKey={openAddKey}
+      />
 
-      {error ? <div className="border border-rose-500/30 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">{error}</div> : null}
-      {visibleDataImport ? (
-        <DatabaseImportStatusBanner
-          dataImport={visibleDataImport}
-          onDismiss={() => setDismissedDataImportIds((current) => new Set(current).add(visibleDataImport.id))}
-        />
+      {error || visibleDataImport ? (
+        <div className="border-b border-white/10 px-4 pt-4 sm:px-5">
+          {error ? <div className="mb-4 border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-200">{error}</div> : null}
+          {visibleDataImport ? (
+            <DatabaseImportStatusBanner
+              dataImport={visibleDataImport}
+              onDismiss={() => setDismissedDataImportIds((current) => new Set(current).add(visibleDataImport.id))}
+            />
+          ) : null}
+        </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="flex min-h-0 flex-col overflow-hidden border border-zinc-800 bg-zinc-950/45">
-          <div className="border-b border-zinc-800 px-4 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
-            Keys
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-            {busy === "keys" && keys.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-center text-sm text-zinc-500">Loading keys...</div>
-            ) : filteredKeys.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-center text-sm text-zinc-500">{hasRuntimeNotice ? "Database not ready." : "No keys found."}</div>
-            ) : filteredKeys.map((key) => {
-              const selected = selectedKey === key.id;
-              return (
-                <button
-                  key={key.id}
-                  type="button"
-                  className={`mb-1 flex w-full items-center justify-between gap-3 border px-3 py-3 text-left transition ${
-                    selected
-                      ? "border-[#4FB8B2]/55 bg-[#4FB8B2]/12 text-[#9af4ee]"
-                      : "border-transparent text-zinc-300 hover:border-zinc-800 hover:bg-zinc-900"
-                  }`}
-                  onClick={() => {
-                    if (selectedKey !== key.id) {
-                      rowsRequestId.current += 1;
-                      setRowsResult(null);
-                      setSelectedKey(key.id);
-                    }
-                  }}
-                >
-                  <span className="min-w-0 truncate text-sm font-medium">{key.name}</span>
-                  <span className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] ${redisTypeTextClass(key.schema)}`}>{key.schema}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <RedisKeyList
+          keys={filteredKeys}
+          selectedKey={selectedKey}
+          loading={busy === "keys"}
+          runtimeUnavailable={hasRuntimeNotice}
+          onSelect={(key) => {
+            if (selectedKey === key.id) return;
+            rowsRequestId.current += 1;
+            setRowsResult(null);
+            setSelectedKey(key.id);
+          }}
+        />
 
-        <div className="flex min-h-0 flex-col border border-zinc-800 bg-zinc-950/45 p-5">
+        <div className="flex min-h-0 flex-col bg-black">
           {hasRuntimeNotice ? (
             <DatabaseRuntimeStatePanel
               state={runtimeState}
@@ -753,21 +715,21 @@ export function RedisBrowserPanel({ serviceId }: { serviceId: string }) {
               onRefresh={() => void loadKeys(selectedDatabase)}
             />
           ) : !selectedKeyMeta ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center text-center text-sm text-zinc-500">Choose a key to inspect its value.</div>
+            <div className="flex min-h-0 flex-1 items-center justify-center px-5 text-center text-xs text-zinc-600">Choose a key to inspect its value.</div>
           ) : busy === "rows" && !rowsBelongToSelectedKey ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center text-center text-sm text-zinc-500">Loading key...</div>
+            <div className="flex min-h-0 flex-1 items-center justify-center px-5 text-center text-xs text-zinc-600">Loading key…</div>
           ) : (
             <>
-              <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-5">
                 <div className="min-w-0">
-                  <h3 className="truncate font-hero text-xl text-zinc-100">{selectedKeyMeta.name}</h3>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className={`${redisMetaPillClass} font-semibold uppercase ${redisTypeBadgeClass(selectedType)}`}>{selectedType || "unknown"}</span>
+                  <h3 className="truncate font-mono text-sm text-white">{selectedKeyMeta.name}</h3>
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    <span className={`${redisMetaPillClass} uppercase text-zinc-300`}>{selectedType || "unknown"}</span>
                     {selectedType !== "string" ? (
-                      <span className={`${redisMetaPillClass} border-zinc-700 bg-zinc-900/80 text-zinc-400`}>{itemCountLabel(selectedKeyMeta)}</span>
+                      <span className={redisMetaPillClass}>{itemCountLabel(selectedKeyMeta)}</span>
                     ) : null}
                     {selectedType === "string" && firstRow.bytes !== undefined ? (
-                      <span className={`${redisMetaPillClass} border-zinc-700 bg-zinc-900/80 text-zinc-400`}>Size: {numberFormatter.format(Number(firstRow.bytes))} B</span>
+                      <span className={redisMetaPillClass}>Size: {numberFormatter.format(Number(firstRow.bytes))} B</span>
                     ) : null}
                     <RedisTtlPopover ttl={firstRow.ttl} busy={busy === "ttl"} onSave={saveRedisTtl} />
                   </div>
@@ -776,7 +738,7 @@ export function RedisBrowserPanel({ serviceId }: { serviceId: string }) {
                   {selectedType && selectedType !== "string" ? (
                     <button
                       type="button"
-                      className="inline-flex h-10 w-10 items-center justify-center border border-zinc-800 bg-zinc-900/70 text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-900 disabled:opacity-60"
+                      className="inline-flex h-8 w-8 items-center justify-center border border-white/15 text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
                       onClick={openAddItem}
                       disabled={busy === "insert"}
                       title="Add item"
@@ -793,14 +755,16 @@ export function RedisBrowserPanel({ serviceId }: { serviceId: string }) {
                   />
                 </div>
               </div>
-              <RedisItems
-                type={selectedType}
-                rows={rows}
-                deleting={busy === "delete"}
-                saving={busy === "save"}
-                onDeleteItem={(row) => void deleteRedisItem(row)}
-                onSaveItem={(row, values) => saveRedisItem(row, values)}
-              />
+              <div className="flex min-h-0 flex-1 p-4 sm:p-5">
+                <RedisItems
+                  type={selectedType}
+                  rows={rows}
+                  deleting={busy === "delete"}
+                  saving={busy === "save"}
+                  onDeleteItem={(row) => void deleteRedisItem(row)}
+                  onSaveItem={(row, values) => saveRedisItem(row, values)}
+                />
+              </div>
             </>
           )}
         </div>
