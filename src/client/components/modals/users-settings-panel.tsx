@@ -1,8 +1,8 @@
-import { Add01Icon, UserGroupIcon } from "@hugeicons/core-free-icons";
+import { Add01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useState } from "react";
 import { api, type ManagedUser } from "../../api";
-import { AppIcon, shellButton } from "../ui/primitives";
-import { ModalShell } from "./modal-shell";
+import { SettingsDialog } from "../../features/settings/settings-dialog";
+import { AppIcon } from "../ui/primitives";
 import { UserCreateForm } from "./user-create-form";
 import { UserList } from "./user-list";
 
@@ -55,38 +55,45 @@ export function UsersSettingsPanel({ open }: { open: boolean }) {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
+    <section className="mx-auto max-w-5xl overflow-hidden border border-white/10 bg-black">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-5 sm:px-7 lg:px-8">
         <div>
-          <h3 className="font-hero text-xl tracking-tight text-zinc-100">Users</h3>
-          <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">
-            {loading ? "Loading..." : `${users.length} user${users.length === 1 ? "" : "s"}`}
-          </div>
+          <h2 className="text-xl tracking-[-0.03em] text-white">Users</h2>
+          <p className="mt-1.5 text-sm text-zinc-500">
+            {loading ? "Loading users…" : `${users.length} ${users.length === 1 ? "user" : "users"}`}
+          </p>
         </div>
-        <button type="button" className={shellButton("primary")} onClick={() => setCreateOpen(true)} disabled={loading}>
+        <button
+          type="button"
+          className="inline-flex h-9 w-fit items-center justify-center gap-2 bg-white px-3.5 text-sm text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => setCreateOpen(true)}
+          disabled={loading}
+        >
           <AppIcon icon={Add01Icon} size={15} />
           Add user
         </button>
-      </div>
+      </header>
 
       <UserList users={users} loading={loading} />
 
-      {error ? <div className="border border-rose-500/35 bg-rose-950/30 px-3.5 py-2.5 font-mono text-[10px] text-rose-300">{error}</div> : null}
+      {error ? (
+        <div className="border-t border-white/10 px-5 pb-5 sm:px-7 sm:pb-7 lg:px-8 lg:pb-8">
+          <div className="mt-5 border-l-2 border-rose-400 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+            {error}
+          </div>
+        </div>
+      ) : null}
 
-      <ModalShell
+      <SettingsDialog
         open={createOpen}
         title="Add user"
-        meta="Email and password"
-        icon={UserGroupIcon}
         onClose={() => {
           if (!creating) setCreateOpen(false);
         }}
-        width="max-w-xl"
-        minHeight=""
-        bodyClassName="min-h-0"
+        width="max-w-md"
       >
         <UserCreateForm creating={creating} onCreate={createUser} />
-      </ModalShell>
-    </div>
+      </SettingsDialog>
+    </section>
   );
 }
