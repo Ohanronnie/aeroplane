@@ -10,7 +10,7 @@ import {
   Cancel01Icon,
   InformationCircleIcon
 } from "@hugeicons/core-free-icons";
-import { AppIcon, FormInput, shellButton } from "../ui/primitives";
+import { AppIcon, FormInput } from "../ui/primitives";
 import { AutocompleteInput } from "../ui/autocomplete-input";
 import type { EnvVar } from "../../api";
 import { ConfirmationDialog } from "./confirmation-dialog";
@@ -41,11 +41,13 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
   const [editKey, setEditKey] = useState(item.key);
   const [editValue, setEditValue] = useState(item.value ?? "");
 
-  // Keep in sync with changes from upstream
+  // Polling replaces `item` with a new object. Only sync server values while
+  // the row is closed so an active draft is never overwritten.
   useEffect(() => {
+    if (editing) return;
     setEditKey(item.key);
     setEditValue(item.value ?? "");
-  }, [item]);
+  }, [editing, item.key, item.value]);
 
   async function handleCopy() {
     if (!item.value) return;
@@ -83,7 +85,7 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
       <span className="relative shrink-0">
         <button
           type="button"
-          className="group inline-flex h-7 w-7 items-center justify-center text-zinc-500 transition hover:text-[#7fe3dd] focus:text-[#7fe3dd] focus:outline-none"
+          className="group inline-flex h-7 w-7 items-center justify-center text-zinc-600 transition hover:text-white focus:text-white focus:outline-none"
           onClick={() => setHintOpen((current) => !current)}
           onBlur={() => setHintOpen(false)}
           aria-describedby={hintId}
@@ -93,7 +95,7 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
           <AppIcon icon={InformationCircleIcon} size={15} />
           <span
             id={hintId}
-            className={`pointer-events-none absolute left-1/2 top-[calc(100%+0.5rem)] z-40 w-72 -translate-x-1/2 border border-zinc-700 bg-zinc-950 px-3 py-2 text-left text-xs normal-case leading-5 tracking-normal text-zinc-200 shadow-[0_16px_40px_rgba(0,0,0,0.35)] ${
+            className={`pointer-events-none absolute left-1/2 top-[calc(100%+0.5rem)] z-40 w-72 -translate-x-1/2 border border-white/15 bg-black px-3 py-2 text-left text-xs normal-case leading-5 tracking-normal text-zinc-300 shadow-[0_16px_40px_rgba(0,0,0,0.5)] ${
               hintOpen ? "block" : "hidden group-hover:block group-focus:block"
             }`}
           >
@@ -106,10 +108,10 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
 
   if (editing) {
     return (
-      <div className="border-b border-zinc-800 bg-zinc-900/40 px-5 py-3 transition-colors duration-200 flex flex-col gap-2 w-full">
+      <div className="flex w-full flex-col gap-2 border-b border-white/10 bg-white/[0.025] px-5 py-3">
         <form
           onSubmit={handleSave}
-          className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-3"
+          className="grid w-full gap-3 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.4fr)_104px] lg:items-center"
         >
           <div>
             <FormInput
@@ -119,7 +121,8 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
               autoComplete="off"
               required
               disabled={busy}
-              className="font-mono uppercase tracking-[0.06em] h-9 text-xs focus:border-[#4FB8B2]"
+              variant="monochrome"
+              className="!h-9 border-white/15 bg-black font-mono text-xs uppercase tracking-[0.04em]"
             />
           </div>
           <div className="relative flex min-w-0 items-center">
@@ -131,30 +134,31 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
               placeholder="VALUE"
               autoComplete="off"
               disabled={busy}
-              className="font-mono h-9 text-xs pr-9 focus:border-[#4FB8B2]"
+              variant="monochrome"
+              className="!h-9 border-white/15 bg-black pr-9 font-mono text-xs"
             />
             <button
               type="button"
-              className="absolute right-2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="absolute right-2 text-zinc-600 transition hover:text-white"
               onClick={() => setHidden(!hidden)}
               disabled={busy}
             >
               <AppIcon icon={hidden ? EyeIcon : EyeOff} size={15} />
             </button>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-end gap-1.5">
             <button
               type="submit"
-              className="inline-flex h-9 items-center justify-center border border-zinc-700 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-950/40 hover:text-emerald-300 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] transition disabled:opacity-60"
+              className="inline-flex h-9 w-9 items-center justify-center bg-white text-black transition hover:bg-zinc-200 disabled:opacity-50"
               disabled={busy}
               title="Save"
+              aria-label="Save variable"
             >
-              <AppIcon icon={CheckmarkCircle02Icon} size={14} className="mr-1" />
-              Save
+              <AppIcon icon={CheckmarkCircle02Icon} size={14} />
             </button>
             <button
               type="button"
-              className="inline-flex h-9 items-center justify-center border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] transition disabled:opacity-60"
+              className="inline-flex h-9 w-9 items-center justify-center border border-white/15 text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-50"
               onClick={() => {
                 setEditKey(item.key);
                 setEditValue(item.value ?? "");
@@ -162,19 +166,19 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
               }}
               disabled={busy}
               title="Cancel"
+              aria-label="Cancel editing"
             >
-              <AppIcon icon={Cancel01Icon} size={14} className="mr-1" />
-              Cancel
+              <AppIcon icon={Cancel01Icon} size={14} />
             </button>
           </div>
         </form>
         {hasReference && (
-          <div className="ml-1 flex items-center gap-2 text-[11px] text-zinc-400 font-mono select-none">
-            <span className="inline-flex items-center gap-1 rounded bg-[#4FB8B2]/10 border border-[#4FB8B2]/20 px-1.5 py-0.5 text-[#4FB8B2] font-semibold text-[9px] uppercase tracking-[0.08em]">
+          <div className="flex select-none items-center gap-2 font-mono text-[10px] text-zinc-500">
+            <span className="border border-white/10 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em] text-zinc-400">
               Reference
             </span>
-            <span className="text-zinc-500">→ resolves to:</span>
-            <span className={`font-semibold text-zinc-300 ${hidden ? "select-none tracking-widest text-zinc-500/80 font-sans" : "select-all"}`}>
+            <span>resolves to</span>
+            <span className={hidden ? "select-none tracking-widest text-zinc-600" : "select-all text-zinc-300"}>
               {hidden ? "••••••••••••••••" : item.resolvedValue}
             </span>
           </div>
@@ -185,11 +189,10 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
 
   return (
     <>
-      <div className="border-b border-zinc-800 last:border-b-0 px-5 py-4 bg-zinc-900/10 hover:bg-zinc-900/30 transition-colors duration-200 flex flex-col gap-2 w-full">
-        <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-4">
-          <div className="flex min-w-0 items-center gap-4">
-            <span className="font-mono text-lg text-zinc-500">{`{ }`}</span>
-            <span className="truncate font-mono text-[15px] uppercase tracking-[0.06em] text-zinc-100 font-medium">
+      <div className="flex w-full flex-col gap-2 border-b border-white/10 px-5 py-3 transition last:border-b-0 hover:bg-white/[0.025]">
+        <div className="grid w-full gap-3 lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.4fr)_104px] lg:items-center">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-mono text-xs uppercase tracking-[0.04em] text-zinc-200">
               {item.key}
             </span>
             <PublicDatabaseUrlHint />
@@ -200,11 +203,12 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
               type={hidden ? "password" : "text"}
               value={item.value ?? ""}
               readOnly
-              className="font-mono text-xs h-9 bg-zinc-950/30 border-zinc-800/80 cursor-text select-all pr-9 focus:border-zinc-700/80"
+              variant="monochrome"
+              className="!h-9 cursor-text select-all border-white/10 bg-white/[0.02] pr-9 font-mono text-xs"
             />
             <button
               type="button"
-              className="absolute right-2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="absolute right-2 text-zinc-600 transition hover:text-white"
               onClick={() => setHidden(!hidden)}
               disabled={busy}
               title={hidden ? "Show Value" : "Hide Value"}
@@ -213,13 +217,13 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
             </button>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center justify-end gap-1">
             <button
               type="button"
-              className={`inline-flex h-8 w-8 items-center justify-center border transition duration-150 ${
+              className={`inline-flex h-8 w-8 items-center justify-center border transition ${
                 copied
-                  ? "border-[#4FB8B2]/40 bg-[#4FB8B2]/10 text-[#4FB8B2]"
-                  : "border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-100"
+                  ? "border-emerald-400/50 bg-emerald-400/10 text-emerald-300"
+                  : "border-white/10 text-zinc-500 hover:border-white/30 hover:bg-white/[0.05] hover:text-white"
               }`}
               onClick={handleCopy}
               title={copied ? "Copied!" : "Copy Value"}
@@ -230,7 +234,7 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
 
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-100 transition duration-150"
+              className="inline-flex h-8 w-8 items-center justify-center border border-white/10 text-zinc-500 transition hover:border-white/30 hover:bg-white/[0.05] hover:text-white"
               onClick={() => {
                 setHidden(false);
                 setEditing(true);
@@ -243,7 +247,7 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
 
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center border border-zinc-800 text-zinc-400 hover:border-rose-500/35 hover:bg-rose-500/10 hover:text-rose-300 transition duration-150"
+              className="inline-flex h-8 w-8 items-center justify-center border border-white/10 text-zinc-500 transition hover:border-rose-400/50 hover:bg-rose-400/10 hover:text-rose-300"
               onClick={() => setDeleteDialogOpen(true)}
               title="Delete"
               disabled={busy}
@@ -253,12 +257,12 @@ export function EnvVarRow({ item, onSave, onDelete, busy, suggestions }: EnvVarR
           </div>
         </div>
         {hasReference && (
-          <div className="ml-10 flex items-center gap-2 text-[11px] text-zinc-400 font-mono select-none">
-            <span className="inline-flex items-center gap-1 rounded bg-[#4FB8B2]/10 border border-[#4FB8B2]/20 px-1.5 py-0.5 text-[#4FB8B2] font-semibold text-[9px] uppercase tracking-[0.08em]">
+          <div className="flex select-none items-center gap-2 font-mono text-[10px] text-zinc-500">
+            <span className="border border-white/10 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.08em] text-zinc-400">
               Reference
             </span>
-            <span className="text-zinc-500">→ resolves to:</span>
-            <span className={`font-semibold text-zinc-300 ${hidden ? "select-none tracking-widest text-zinc-500/80 font-sans" : "select-all"}`}>
+            <span>resolves to</span>
+            <span className={hidden ? "select-none tracking-widest text-zinc-600" : "select-all text-zinc-300"}>
               {hidden ? "••••••••••••••••" : item.resolvedValue}
             </span>
           </div>
