@@ -213,6 +213,7 @@ export function ServicePageShell({
   const [error, setError] = useState("");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const lastDeploymentRefreshRef = useRef(0);
+  const overviewRequestIdRef = useRef(0);
   const settingsServiceIdRef = useRef<null | string>(null);
   const selectedTabRef = useRef(selectedTab);
 
@@ -228,10 +229,12 @@ export function ServicePageShell({
   }, [serviceId]);
 
   const loadOverview = useCallback(async (options: { showLoading?: boolean; syncSettings?: boolean } = {}) => {
+    const requestId = ++overviewRequestIdRef.current;
     const showLoading = options.showLoading ?? true;
     if (showLoading) setOverviewLoading(true);
     try {
       const result = await api.serviceOverview(serviceId);
+      if (requestId !== overviewRequestIdRef.current) return;
       const shouldSyncSettings = options.syncSettings ?? (selectedTabRef.current !== "settings" || settingsServiceIdRef.current !== result.service.id);
       if (shouldSyncSettings) settingsServiceIdRef.current = result.service.id;
       startTransition(() => {
@@ -247,6 +250,7 @@ export function ServicePageShell({
         setOverviewLoading(false);
       });
     } catch (issue) {
+      if (requestId !== overviewRequestIdRef.current) return;
       startTransition(() => {
         setError(issue instanceof Error ? issue.message : "Could not load service");
         setOverviewLoading(false);
@@ -678,7 +682,20 @@ export function ServicePageShell({
     <>
       <main className="h-dvh overflow-hidden bg-black text-white">
         <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-1">
-          <ProjectsDashboardSidebar currentUser={currentUser} tools={tools} owner={owner} />
+          <ProjectsDashboardSidebar
+            currentUser={currentUser}
+            tools={tools}
+            owner={owner}
+            contextLabel={service?.name ?? "Service"}
+            contextItems={visibleTabs.map(([tab, icon]) => ({
+              id: tab,
+              label: serviceTabLabels[tab],
+              icon,
+              active: selectedTab === tab,
+              attention: tab === "deployments" && hasPendingDeployment,
+              onSelect: () => onTabChange(tab)
+            }))}
+          />
 
           <section className="min-h-0 min-w-0 overflow-hidden bg-zinc-950">
             <div className={viewportClass}>
@@ -690,7 +707,7 @@ export function ServicePageShell({
               onServiceSelect={onServiceSelect ?? (() => undefined)}
             />
 
-            <nav aria-label="Service" className="flex shrink-0 gap-3 overflow-x-auto border-b border-white/10">
+            <nav aria-label="Service" className="flex shrink-0 gap-3 overflow-x-auto border-b border-white/10 lg:hidden">
               {visibleTabs.map(([tab, icon]) => (
                 <button key={tab} type="button" className={tabButtonClass(tab)} onClick={() => onTabChange(tab)}>
                   <AppIcon icon={icon} size={14} />
