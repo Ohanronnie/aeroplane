@@ -1,6 +1,6 @@
 import { Alert02Icon, Clock01Icon, DatabaseIcon, DatabaseSync01Icon, Refresh03Icon } from "@hugeicons/core-free-icons";
 import type { DatabaseRuntimeState } from "../../api";
-import { AppIcon, shellButton } from "../ui/primitives";
+import { AppIcon } from "../ui/primitives";
 
 type DatabaseRuntimeStatePanelProps = {
   state: Exclude<DatabaseRuntimeState, "ready">;
@@ -40,15 +40,20 @@ export function DatabaseRuntimeStatePanel({ state, message, busy = false, onRefr
   const copy = runtimeStateCopy[state];
 
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center border border-zinc-800 bg-zinc-950/45 px-5 py-8 text-center">
+    <div className="flex min-h-0 flex-1 items-center justify-center px-5 py-8 text-center">
       <div className="flex max-w-md flex-col items-center">
-        <div className={`mb-4 grid h-11 w-11 place-items-center border ${copy.accent}`}>
+        <div className={`mb-4 grid h-10 w-10 place-items-center border ${copy.accent}`}>
           <AppIcon icon={copy.icon} size={19} className={state === "deploying" ? "animate-pulse" : ""} />
         </div>
-        <h3 className="font-hero text-lg text-zinc-100">{copy.title}</h3>
-        <p className="mt-2 text-sm leading-6 text-zinc-400">{message || copy.fallback}</p>
-        <button type="button" className={`${shellButton("secondary")} mt-5 h-9 !py-0`} onClick={onRefresh} disabled={busy}>
-          <AppIcon icon={Refresh03Icon} size={15} className={busy ? "animate-spin" : ""} />
+        <h3 className="text-sm text-zinc-100">{copy.title}</h3>
+        <p className="mt-2 text-xs leading-5 text-zinc-500">{message || copy.fallback}</p>
+        <button
+          type="button"
+          className="mt-5 inline-flex h-8 items-center justify-center gap-2 border border-white/15 px-3 text-xs text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-40"
+          onClick={onRefresh}
+          disabled={busy}
+        >
+          <AppIcon icon={Refresh03Icon} size={13} className={busy ? "animate-spin" : ""} />
           Refresh
         </button>
       </div>
