@@ -1,7 +1,8 @@
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import type { FormEvent } from "react";
 import type { DatabaseColumn } from "../../api";
 import { Dropdown } from "../ui/dropdown";
-import { FieldLabel, FormInput, shellButton } from "../ui/primitives";
+import { AppIcon, FormInput } from "../ui/primitives";
 
 const redisTypeOptions = [
   { value: "string", label: "String" },
@@ -10,6 +11,9 @@ const redisTypeOptions = [
   { value: "set", label: "Set" },
   { value: "zset", label: "Sorted set" }
 ];
+
+const insertLabelClass = "mb-1.5 block font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600";
+const insertInputClass = "!h-9 border-white/15 bg-black text-xs";
 
 export function validRedisType(value: string) {
   return redisTypeOptions.some((option) => option.value === value);
@@ -28,12 +32,12 @@ function RedisValueFields({
     return (
       <>
         <label className="block">
-          <FieldLabel>Field</FieldLabel>
-          <FormInput value={draft.field ?? ""} onChange={(event) => onDraftChange({ ...draft, field: event.target.value })} placeholder="name" required />
+          <span className={insertLabelClass}>Field</span>
+          <FormInput value={draft.field ?? ""} onChange={(event) => onDraftChange({ ...draft, field: event.target.value })} placeholder="name" required variant="monochrome" className={insertInputClass} />
         </label>
         <label className="block">
-          <FieldLabel>Value</FieldLabel>
-          <FormInput value={draft.value ?? ""} onChange={(event) => onDraftChange({ ...draft, value: event.target.value })} placeholder="value" />
+          <span className={insertLabelClass}>Value</span>
+          <FormInput value={draft.value ?? ""} onChange={(event) => onDraftChange({ ...draft, value: event.target.value })} placeholder="value" variant="monochrome" className={insertInputClass} />
         </label>
       </>
     );
@@ -43,12 +47,12 @@ function RedisValueFields({
     return (
       <>
         <label className="block">
-          <FieldLabel>Member</FieldLabel>
-          <FormInput value={draft.member ?? ""} onChange={(event) => onDraftChange({ ...draft, member: event.target.value })} placeholder="member" required />
+          <span className={insertLabelClass}>Member</span>
+          <FormInput value={draft.member ?? ""} onChange={(event) => onDraftChange({ ...draft, member: event.target.value })} placeholder="member" required variant="monochrome" className={insertInputClass} />
         </label>
         <label className="block">
-          <FieldLabel>Score</FieldLabel>
-          <FormInput value={draft.score ?? ""} onChange={(event) => onDraftChange({ ...draft, score: event.target.value })} placeholder="0" />
+          <span className={insertLabelClass}>Score</span>
+          <FormInput value={draft.score ?? ""} onChange={(event) => onDraftChange({ ...draft, score: event.target.value })} placeholder="0" variant="monochrome" className={insertInputClass} />
         </label>
       </>
     );
@@ -56,8 +60,8 @@ function RedisValueFields({
 
   return (
     <label className="block">
-      <FieldLabel>{type === "list" ? "Item value" : type === "set" ? "Member" : "Value"}</FieldLabel>
-      <FormInput value={draft.value ?? ""} onChange={(event) => onDraftChange({ ...draft, value: event.target.value })} placeholder="value" />
+      <span className={insertLabelClass}>{type === "list" ? "Item value" : type === "set" ? "Member" : "Value"}</span>
+      <FormInput value={draft.value ?? ""} onChange={(event) => onDraftChange({ ...draft, value: event.target.value })} placeholder="value" variant="monochrome" className={insertInputClass} />
     </label>
   );
 }
@@ -94,54 +98,66 @@ export function DatabaseInsertSheet({
   const redisType = draft.type ?? "string";
 
   return (
-    <div className="fixed bottom-4 right-4 top-4 z-[60] w-full max-w-md border-l border-zinc-700 bg-zinc-950 shadow-[-24px_0_60px_rgba(0,0,0,0.35)]">
-      <form onSubmit={onSubmit} className="flex h-full flex-col">
-        <div className="border-b border-zinc-800 px-5 py-4">
-          <div className="font-hero text-lg text-zinc-100">{title}</div>
-          <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">{subtitle}</div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+    <div className="fixed inset-0 z-[60] bg-black/75">
+      <aside className="absolute inset-y-0 right-0 w-full max-w-md border-l border-white/15 bg-black shadow-[-24px_0_60px_rgba(0,0,0,0.55)]">
+        <form onSubmit={onSubmit} className="flex h-full flex-col">
+          <header className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg tracking-[-0.03em] text-white">{title}</h2>
+              <p className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">{subtitle}</p>
+            </div>
+            <button
+              type="button"
+              className="grid h-8 w-8 shrink-0 place-items-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
+              onClick={onClose}
+              aria-label="Close"
+              title="Close"
+            >
+              <AppIcon icon={Cancel01Icon} size={15} />
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {error ? (
-            <div className="mb-4 border border-rose-500/30 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">{error}</div>
+            <div className="mb-4 border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-200">{error}</div>
           ) : null}
           {isRedis ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {redisMode === "key" ? (
                 <>
                   <label className="block">
-                    <FieldLabel>Key</FieldLabel>
-                    <FormInput value={draft.key ?? ""} onChange={(event) => onDraftChange({ ...draft, key: event.target.value })} placeholder="session:example" required />
+                    <span className={insertLabelClass}>Key</span>
+                    <FormInput value={draft.key ?? ""} onChange={(event) => onDraftChange({ ...draft, key: event.target.value })} placeholder="session:example" required variant="monochrome" className={`${insertInputClass} font-mono`} />
                   </label>
                   <label className="block">
-                    <FieldLabel>Type</FieldLabel>
-                    <Dropdown value={redisType} options={redisTypeOptions} onChange={(type) => onDraftChange({ ...draft, type })} />
+                    <span className={insertLabelClass}>Type</span>
+                    <Dropdown value={redisType} options={redisTypeOptions} onChange={(type) => onDraftChange({ ...draft, type })} variant="monochrome" size="compact" className="[&>button]:!h-9" />
                   </label>
                 </>
               ) : null}
               <RedisValueFields type={redisType} draft={draft} onDraftChange={onDraftChange} />
               {redisMode === "key" ? (
                 <label className="block">
-                  <FieldLabel>TTL seconds</FieldLabel>
-                  <FormInput value={draft.ttl ?? ""} onChange={(event) => onDraftChange({ ...draft, ttl: event.target.value })} placeholder="Optional" />
+                  <span className={insertLabelClass}>TTL seconds</span>
+                  <FormInput value={draft.ttl ?? ""} onChange={(event) => onDraftChange({ ...draft, ttl: event.target.value })} placeholder="No expiry" inputMode="numeric" variant="monochrome" className={insertInputClass} />
                 </label>
               ) : null}
             </div>
           ) : isMongo ? (
             <div className="space-y-4">
               <label className="block">
-                <FieldLabel>Database</FieldLabel>
-                <FormInput value={draft.database ?? ""} onChange={(event) => onDraftChange({ ...draft, database: event.target.value })} placeholder="aeroplane" required />
+                <span className={insertLabelClass}>Database</span>
+                <FormInput value={draft.database ?? ""} onChange={(event) => onDraftChange({ ...draft, database: event.target.value })} placeholder="aeroplane" required variant="monochrome" className={insertInputClass} />
               </label>
               <label className="block">
-                <FieldLabel>Collection</FieldLabel>
-                <FormInput value={draft.collection ?? ""} onChange={(event) => onDraftChange({ ...draft, collection: event.target.value })} placeholder="users" required />
+                <span className={insertLabelClass}>Collection</span>
+                <FormInput value={draft.collection ?? ""} onChange={(event) => onDraftChange({ ...draft, collection: event.target.value })} placeholder="users" required variant="monochrome" className={insertInputClass} />
               </label>
               <label className="block">
-                <FieldLabel>Document JSON</FieldLabel>
+                <span className={insertLabelClass}>Document JSON</span>
                 <textarea
                   value={draft.document ?? ""}
                   onChange={(event) => onDraftChange({ ...draft, document: event.target.value })}
-                  className="min-h-56 w-full resize-none border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 outline-none transition focus:border-[#4FB8B2]"
+                  className="min-h-56 w-full resize-none border border-white/15 bg-black px-3 py-2 font-mono text-xs text-zinc-100 outline-none transition focus:border-white"
                   spellCheck={false}
                 />
               </label>
@@ -150,22 +166,24 @@ export function DatabaseInsertSheet({
             <div className="space-y-4">
               {columns.map((column) => (
                 <label key={column.name} className="block">
-                  <FieldLabel>{column.name}</FieldLabel>
-                  <FormInput value={draft[column.name] ?? ""} onChange={(event) => onDraftChange({ ...draft, [column.name]: event.target.value })} placeholder={column.type} />
+                  <span className={insertLabelClass}>{column.name}</span>
+                  <FormInput value={draft[column.name] ?? ""} onChange={(event) => onDraftChange({ ...draft, [column.name]: event.target.value })} placeholder={column.type} variant="monochrome" className={insertInputClass} />
                 </label>
               ))}
             </div>
           )}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-zinc-800 px-5 py-4">
-          <button type="button" className={shellButton("ghost")} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className={shellButton("primary")} disabled={busy === "insert"}>
+          </div>
+          <footer className="border-t border-white/10 p-5">
+            <button
+              type="submit"
+              className="inline-flex h-10 w-full items-center justify-center bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-40"
+              disabled={busy === "insert"}
+            >
             {buttonLabel}
-          </button>
-        </div>
-      </form>
+            </button>
+          </footer>
+        </form>
+      </aside>
     </div>
   );
 }
