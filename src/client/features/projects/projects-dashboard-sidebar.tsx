@@ -9,6 +9,15 @@ import { BrandMark } from "../../components/ui/brand-mark";
 import { AppIcon } from "../../components/ui/primitives";
 import { SystemHealthPill } from "./system-health-pill";
 
+export type DashboardSidebarItem = {
+  id: string;
+  label: string;
+  icon: unknown;
+  active: boolean;
+  attention?: boolean;
+  onSelect: () => void;
+};
+
 function userInitials(user: AuthUser | null) {
   const source = user?.name || user?.email || "A";
   return source
@@ -22,11 +31,15 @@ function userInitials(user: AuthUser | null) {
 export function ProjectsDashboardSidebar({
   currentUser,
   tools,
-  owner
+  owner,
+  contextLabel,
+  contextItems = []
 }: {
   currentUser: AuthUser | null;
   tools: ToolCheck[];
   owner: boolean;
+  contextLabel?: string;
+  contextItems?: DashboardSidebarItem[];
 }) {
   return (
     <aside className="relative z-20 flex items-center border-b border-white/10 bg-black px-5 py-4 lg:sticky lg:top-0 lg:h-dvh lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
@@ -44,7 +57,7 @@ export function ProjectsDashboardSidebar({
         </div>
       </div>
 
-      <nav aria-label="Dashboard" className="mt-10 hidden lg:block">
+      <nav aria-label="Dashboard" className="mt-10 hidden min-h-0 flex-1 overflow-y-auto lg:block">
         <p className="mb-3 px-3 font-mono text-[8px] uppercase tracking-[0.2em] text-zinc-600">
           Workspace
         </p>
@@ -64,6 +77,33 @@ export function ProjectsDashboardSidebar({
           <AppIcon icon={Settings01Icon} size={16} />
           <span className="text-sm">System settings</span>
         </Link>
+
+        {contextItems.length > 0 ? (
+          <div className="mt-7 border-t border-white/10 pt-6">
+            <p className="mb-3 truncate px-3 font-mono text-[8px] uppercase tracking-[0.2em] text-zinc-600">
+              {contextLabel || "Service"}
+            </p>
+            <div className="space-y-1">
+              {contextItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={
+                    item.active
+                      ? "flex h-10 w-full items-center gap-3 bg-white/10 px-3 text-left text-sm text-white"
+                      : "flex h-10 w-full items-center gap-3 px-3 text-left text-sm text-zinc-500 transition hover:bg-white/5 hover:text-white"
+                  }
+                  onClick={item.onSelect}
+                  aria-current={item.active ? "page" : undefined}
+                >
+                  <AppIcon icon={item.icon} size={15} />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {item.attention ? <span className="h-1.5 w-1.5 bg-amber-400" /> : null}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </nav>
 
       <div className="ml-auto flex items-center gap-2 lg:ml-0 lg:mt-auto lg:block">
