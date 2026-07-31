@@ -1,65 +1,46 @@
 import { StarIcon } from "@hugeicons/core-free-icons";
 import { AppIcon } from "../ui/primitives";
-import { AiProviderApiKeyEditor } from "./ai-provider-api-key-editor";
 import type { AiProviderDefinition } from "./ai-settings-data";
-import { AiProviderModelPicker } from "./ai-provider-model-picker";
 
 export function AiProviderCard({
   provider,
   selected,
-  model,
   connected,
-  keySuffix,
-  isDefaultModel = false,
-  updating = false,
-  onSelect,
-  onSelectModel,
-  onSaveApiKey,
-  onSetDefaultModel
+  isDefaultModel,
+  onSelect
 }: {
   provider: AiProviderDefinition;
   selected: boolean;
-  model: string;
   connected: boolean;
-  keySuffix: string;
-  isDefaultModel?: boolean;
-  updating?: boolean;
+  isDefaultModel: boolean;
   onSelect: () => void;
-  onSelectModel: (modelId: string) => void;
-  onSaveApiKey: (apiKey: string) => Promise<void> | void;
-  onSetDefaultModel: () => void;
 }) {
   return (
-    <div
-      className="flex min-h-28 items-start justify-between gap-3 border border-zinc-800 bg-zinc-950/35 p-4 text-left transition hover:border-zinc-600 hover:bg-zinc-900/65"
+    <button
+      type="button"
+      className={`mb-1 flex min-h-16 w-full items-center justify-between gap-3 border-l-2 px-3 py-2.5 text-left transition ${
+        selected
+          ? "border-white bg-white/[0.08]"
+          : "border-transparent bg-transparent hover:bg-white/[0.04]"
+      }`}
       onClick={onSelect}
-      aria-selected={selected}
+      aria-pressed={selected}
     >
-      <span className="flex min-w-0 items-start gap-3">
-        <span className={`grid h-10 w-10 shrink-0 place-items-center border ${provider.logoFrameClass}`}>
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center">
           <img src={provider.logoUrl} alt="" className="max-h-6 max-w-7 object-contain" loading="lazy" />
         </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-zinc-100">{provider.name}</span>
-          <AiProviderModelPicker provider={provider} selectedModel={model} busy={updating} onSelectModel={onSelectModel} />
-          <AiProviderApiKeyEditor provider={provider} connected={connected} keySuffix={keySuffix} busy={updating} onSaveApiKey={onSaveApiKey} />
+        <span className="truncate text-sm text-zinc-100">{provider.name}</span>
+      </span>
+
+      <span className="flex shrink-0 items-center gap-2">
+        {isDefaultModel ? <AppIcon icon={StarIcon} size={12} className="fill-amber-300 text-amber-300" /> : null}
+        <span className={`h-1.5 w-1.5 ${connected ? "bg-emerald-400" : "border border-zinc-600"}`} />
+        <span className="sr-only">
+          {connected ? "Connected" : "Not connected"}
+          {isDefaultModel ? ", default provider" : ""}
         </span>
       </span>
-      <button
-        type="button"
-        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center border transition disabled:cursor-wait disabled:opacity-60 ${
-          isDefaultModel ? "border-amber-400/60 bg-amber-400/15 text-amber-300" : "border-zinc-700 bg-zinc-900/70 text-zinc-500"
-        }`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSetDefaultModel();
-        }}
-        disabled={updating}
-        title={isDefaultModel ? "Default model" : "Set as default model"}
-        aria-label={isDefaultModel ? "Default model" : "Set as default model"}
-      >
-        <AppIcon icon={StarIcon} size={14} className={isDefaultModel ? "fill-amber-300" : ""} />
-      </button>
-    </div>
+    </button>
   );
 }

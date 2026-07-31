@@ -61,7 +61,7 @@ export function DeploymentFailureModelPicker({
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className="inline-flex h-9 max-w-full items-center gap-2 bg-zinc-900/45 px-2.5 text-left text-xs text-zinc-100 outline-none transition hover:bg-zinc-900 disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex h-8 max-w-full items-center gap-2 border border-white/15 px-2.5 text-left text-xs text-zinc-200 outline-none transition hover:border-white/35 hover:bg-white/[0.05] disabled:cursor-wait disabled:opacity-40"
         onClick={() => setOpen((current) => !current)}
         onKeyDown={(event) => {
           if (event.key === "Escape") setOpen(false);
@@ -77,19 +77,19 @@ export function DeploymentFailureModelPicker({
 
       {open ? (
         <div
-          className={`absolute top-full z-50 mt-2 flex w-[560px] max-w-[calc(100vw-4rem)] overflow-hidden border border-zinc-700 bg-zinc-950 shadow-[0_24px_80px_rgba(0,0,0,0.5)] ${
+          className={`absolute top-full z-50 mt-2 flex w-[520px] max-w-[calc(100vw-4rem)] overflow-hidden border border-white/15 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.6)] ${
             menuAlign === "right" ? "right-0" : "left-0"
           }`}
         >
-          <div className="flex w-16 shrink-0 flex-col items-center border-r border-zinc-800 bg-zinc-950/95 py-2">
+          <div className="flex w-14 shrink-0 flex-col items-center border-r border-white/10 py-2">
             {providerLogos.map(({ provider, logo }) => {
               const active = provider.id === activeProvider?.id;
               return (
                 <button
                   key={provider.id}
                   type="button"
-                  className={`grid h-12 w-full place-items-center border-l-2 transition ${
-                    active ? "border-[#4FB8B2] bg-[#4FB8B2]/10" : "border-transparent text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200"
+                  className={`grid h-11 w-full place-items-center transition ${
+                    active ? "bg-white/[0.1] text-white" : "text-zinc-600 hover:bg-white/[0.05] hover:text-white"
                   }`}
                   onClick={() => setActiveProviderId(provider.id)}
                   title={provider.name}
@@ -104,7 +104,7 @@ export function DeploymentFailureModelPicker({
           <div className="min-w-0 flex-1 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{activeProvider?.name ?? "Provider"}</div>
+                <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">{activeProvider?.name ?? "Provider"}</div>
               </div>
             </div>
 
@@ -116,7 +116,7 @@ export function DeploymentFailureModelPicker({
                     key={model.id}
                     type="button"
                     className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition ${
-                      active ? "bg-[#4FB8B2]/15 text-[#7fe3dd]" : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                      active ? "bg-white text-black" : "text-zinc-400 hover:bg-white/[0.05] hover:text-white"
                     }`}
                     onClick={() => {
                       if (activeProvider) onSelect(activeProvider.id, model.id);
@@ -127,7 +127,7 @@ export function DeploymentFailureModelPicker({
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm">{model.name}</span>
-                      <span className="mt-0.5 block truncate font-mono text-[10px] text-zinc-500">{model.id}</span>
+                      <span className={`mt-0.5 block truncate font-mono text-[9px] ${active ? "text-black/55" : "text-zinc-600"}`}>{model.id}</span>
                     </span>
                     {active ? <AppIcon icon={CheckmarkCircle02Icon} size={15} className="shrink-0" /> : null}
                   </button>

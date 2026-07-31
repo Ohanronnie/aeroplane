@@ -57,35 +57,52 @@ export function DeploymentSettingsPanel({ open }: { open: boolean }) {
   const busy = loading || saving;
 
   return (
-    <section className="border border-zinc-800 bg-zinc-950/45 p-6">
-      <div className="space-y-3">
-        <h3 className="font-hero text-2xl tracking-tight text-zinc-100">Concurrent deployments</h3>
-        <div className="inline-grid w-fit grid-cols-[44px_64px_44px]">
-          <button
-            type="button"
-            className="grid h-11 place-items-center border border-zinc-700 bg-zinc-900 font-mono text-xl text-zinc-100 transition hover:border-[#4FB8B2]/60 hover:text-[#7fe3dd] disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => void saveConcurrency(deploymentConcurrency - 1)}
-            disabled={busy || deploymentConcurrency <= minConcurrency}
-            aria-label="Decrease concurrent deployments"
-          >
-            -
-          </button>
-          <div className="grid h-11 place-items-center border-y border-zinc-700 bg-zinc-950 font-mono text-base font-semibold text-zinc-100">
-            {deploymentConcurrency}
-          </div>
-          <button
-            type="button"
-            className="grid h-11 place-items-center border border-zinc-700 bg-zinc-900 font-mono text-xl text-zinc-100 transition hover:border-[#4FB8B2]/60 hover:text-[#7fe3dd] disabled:cursor-not-allowed disabled:opacity-40"
-            onClick={() => void saveConcurrency(deploymentConcurrency + 1)}
-            disabled={busy || deploymentConcurrency >= maxConcurrency}
-            aria-label="Increase concurrent deployments"
-          >
-            +
-          </button>
+    <section className="mx-auto max-w-3xl overflow-hidden border border-white/10 bg-black">
+      <header className="border-b border-white/10 px-5 py-5 sm:px-7">
+        <h2 className="text-xl tracking-[-0.03em] text-white">Concurrent deployments</h2>
+        <p className="mt-1.5 text-sm text-zinc-500">Set how many deployments can run at once.</p>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-5 px-5 py-5 sm:px-7">
+        <div>
+          <div className="text-sm text-zinc-300">Concurrency limit</div>
+          <div className="mt-1 text-xs text-zinc-600">Between {minConcurrency} and {maxConcurrency}</div>
         </div>
+        {loading ? (
+          <div className="h-9 w-[132px] animate-pulse bg-white/[0.04]" />
+        ) : (
+          <div className="inline-grid grid-cols-[36px_60px_36px]">
+            <button
+              type="button"
+              className="grid h-9 place-items-center border border-white/15 text-lg text-zinc-300 transition hover:border-white/40 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              onClick={() => void saveConcurrency(deploymentConcurrency - 1)}
+              disabled={busy || deploymentConcurrency <= minConcurrency}
+              aria-label="Decrease concurrent deployments"
+            >
+              -
+            </button>
+            <div className="grid h-9 place-items-center border-y border-white/15 bg-white/[0.03] font-mono text-sm text-zinc-100">
+              {deploymentConcurrency}
+            </div>
+            <button
+              type="button"
+              className="grid h-9 place-items-center border border-white/15 text-lg text-zinc-300 transition hover:border-white/40 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              onClick={() => void saveConcurrency(deploymentConcurrency + 1)}
+              disabled={busy || deploymentConcurrency >= maxConcurrency}
+              aria-label="Increase concurrent deployments"
+            >
+              +
+            </button>
+          </div>
+        )}
       </div>
-      {saving ? <div className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">Saving...</div> : null}
-      {error ? <div className="mt-4 border border-rose-500/35 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">{error}</div> : null}
+
+      {saving ? <div className="border-t border-white/10 px-5 py-3 text-xs text-zinc-500 sm:px-7">Saving…</div> : null}
+      {error ? (
+        <div className="border-t border-white/10 px-5 py-4 sm:px-7">
+          <div className="border-l-2 border-rose-400 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{error}</div>
+        </div>
+      ) : null}
     </section>
   );
 }

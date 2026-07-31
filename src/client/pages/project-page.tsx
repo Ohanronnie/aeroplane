@@ -1,84 +1,54 @@
 import { useNavigate } from "@tanstack/react-router";
 import {
-  AddSquareIcon,
+  Add01Icon,
   CloudServerIcon,
-  CheckmarkCircle02Icon,
-  Cancel01Icon,
   Delete02Icon,
-  FolderOpenIcon,
-  FunctionIcon,
-  GitBranchIcon,
-  GithubIcon,
-  PackageIcon,
-  PencilEdit02Icon,
-  Globe02Icon,
+  PencilEdit02Icon
 } from "@hugeicons/core-free-icons";
 import {
-  FormEvent,
   startTransition,
   useCallback,
   useEffect,
   useState,
 } from "react";
-import { api, type ProjectCard, type ProjectDetail } from "../api";
-import {
-  AppIcon,
-  FieldLabel,
-  FormInput,
-  FrameworkMark,
-  shellButton,
-} from "../components/ui/primitives";
+import { api, type ProjectCard, type ProjectDetail, type ToolCheck } from "../api";
+import { useAuthStatus } from "../components/auth/auth-context";
+import { AppIcon } from "../components/ui/primitives";
 import { CreateServiceModal } from "../components/modals/create-service-modal";
 import { DeleteProjectModal } from "../components/modals/delete-project-modal";
+import { EditProjectModal } from "../features/projects/edit-project-modal";
 import { ProjectPageSkeleton } from "../features/projects/project-page-skeleton";
 import { ProjectPageToolbar } from "../features/projects/project-page-toolbar";
+import { ProjectServiceCard } from "../features/projects/project-service-card";
+import { ProjectsDashboardSidebar } from "../features/projects/projects-dashboard-sidebar";
 import type { ServiceFormPayload } from "../features/services/service-form-types";
 import { serviceIsDeploying } from "../lib/deployment-status";
-import { formatTime } from "../lib/format";
 import { usePageTitle } from "../lib/page-title";
-import { dockerImageForService, isDatabaseService, isDockerImageService } from "../../shared/service-source";
-import { functionRuntimeLabels, isFunctionService } from "../../shared/service-functions";
-
-function StatusPill({ status }: { status: string }) {
-  const tone =
-    status === "active" || status === "running"
-      ? "border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#4FB8B2]"
-      : status === "building" || status === "queued"
-        ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-        : status === "crashed"
-          ? "border-orange-500/30 bg-orange-500/10 text-orange-300"
-          : status === "failed"
-            ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
-            : "border-zinc-700 bg-zinc-900/50 text-zinc-400";
-
-  return (
-    <span
-      className={`inline-flex border px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.2em] ${tone}`}
-    >
-      {status}
-    </span>
-  );
-}
 
 export function ProjectPage({ projectSlug }: { projectSlug: string }) {
   const navigate = useNavigate();
+  const authStatus = useAuthStatus();
   const [project, setProject] = useState<null | ProjectDetail>(null);
   const [projects, setProjects] = useState<ProjectCard[]>([]);
+  const [tools, setTools] = useState<ToolCheck[]>([]);
   const [createServiceOpen, setCreateServiceOpen] = useState(false);
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
+  const [projectEditError, setProjectEditError] = useState("");
   const [projectForm, setProjectForm] = useState({ name: "", description: "" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const currentProject = project?.slug === projectSlug ? project : null;
+  const currentUser = authStatus?.user ?? null;
+  const owner = currentUser?.role === "owner";
 
   const loadProject = useCallback(async () => {
     try {
       const [projectData, projectListData] = await Promise.all([
         api.project(projectSlug),
-        api.projects().catch(() => ({ projects: [] })),
+        api.projects().catch(() => ({ projects: [] }))
       ]);
       startTransition(() => {
         setProject(projectData.project);
@@ -102,6 +72,26 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
     setLoading(true);
     void loadProject();
   }, [loadProject, projectSlug]);
+
+  useEffect(() => {
+    if (!owner) {
+      setTools([]);
+      return;
+    }
+
+    let cancelled = false;
+    void api.system()
+      .then((result) => {
+        if (!cancelled) setTools(result.tools);
+      })
+      .catch(() => {
+        if (!cancelled) setTools([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [owner]);
 
   useEffect(() => {
     if (!currentProject) return;
@@ -159,11 +149,10 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
     });
   }
 
-  async function saveProject(event: FormEvent) {
-    event.preventDefault();
+  async function saveProject() {
     if (!currentProject) return;
     setSavingProject(true);
-    setError("");
+    setProjectEditError("");
     try {
       const result = await api.updateProject(currentProject.id, {
         name: projectForm.name,
@@ -179,7 +168,7 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
         setEditingProject(false);
       });
     } catch (issue) {
-      setError(
+      setProjectEditError(
         issue instanceof Error ? issue.message : "Could not update project",
       );
     } finally {
@@ -200,326 +189,114 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
 
   return (
     <>
-      <main className="relative isolate min-h-dvh overflow-hidden bg-zinc-950 text-zinc-100">
-        <div
-          aria-hidden
-          className="hero-noise pointer-events-none absolute inset-0"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_60%_at_0%_0%,rgba(79,184,178,0.12),transparent),radial-gradient(ellipse_70%_50%_at_100%_100%,rgba(120,113,255,0.08),transparent)]"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-size-[72px_72px]"
-        />
+      <main className="min-h-dvh bg-black text-white">
+        <div className="grid min-h-dvh lg:grid-cols-[260px_minmax(0,1fr)]">
+          <ProjectsDashboardSidebar currentUser={currentUser} tools={tools} owner={owner} />
 
-        <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 pb-24 pt-14 sm:px-6 lg:pl-14 lg:pr-10">
-          {loading || (!currentProject && !error) ? (
-            <ProjectPageSkeleton />
-          ) : (
-            <>
-              <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                <div className="min-w-0 flex-1">
-                  <ProjectPageToolbar
-                    projects={projects}
-                    currentProject={currentProject}
-                    fallbackProjectName={projectSlug}
-                    onBack={navigateToProjects}
-                    onProjectSelect={navigateToProject}
-                  />
-                  {editingProject ? (
-                    <form
-                      onSubmit={saveProject}
-                      className="mt-4 max-w-2xl space-y-3"
-                    >
-                      <div>
-                        <FieldLabel>Project name</FieldLabel>
-                        <FormInput
-                          value={projectForm.name}
-                          onChange={(event) =>
-                            setProjectForm({
-                              ...projectForm,
-                              name: event.target.value,
-                            })
-                          }
-                          required
-                        />
+          <section className="min-w-0 bg-zinc-950">
+            <div className="mx-auto w-full max-w-[1680px] px-5 pb-20 pt-6 sm:px-8 lg:px-10">
+              {loading || (!currentProject && !error) ? (
+                <ProjectPageSkeleton />
+              ) : (
+                <>
+                  <header className="border-b border-white/10 pb-6">
+                    <ProjectPageToolbar
+                      projects={projects}
+                      currentProject={currentProject}
+                      fallbackProjectName={projectSlug}
+                      onBack={navigateToProjects}
+                      onProjectSelect={navigateToProject}
+                    />
+
+                    <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <h1 className="truncate text-3xl tracking-[-0.04em] text-white sm:text-4xl">
+                            {currentProject?.name ?? projectSlug}
+                          </h1>
+                          <button
+                            type="button"
+                            className="grid h-9 w-9 shrink-0 place-items-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
+                            onClick={() => {
+                              setProjectEditError("");
+                              setEditingProject(true);
+                            }}
+                            aria-label="Edit project"
+                            disabled={!currentProject}
+                          >
+                            <AppIcon icon={PencilEdit02Icon} size={15} />
+                          </button>
+                        </div>
+                        <p className="mt-2 text-sm text-zinc-500">
+                          {currentProject?.description || `${currentProject?.serviceCount ?? 0} service${currentProject?.serviceCount === 1 ? "" : "s"}`}
+                        </p>
                       </div>
-                      <div>
-                        <FieldLabel>Description</FieldLabel>
-                        <FormInput
-                          value={projectForm.description}
-                          onChange={(event) =>
-                            setProjectForm({
-                              ...projectForm,
-                              description: event.target.value,
-                            })
-                          }
-                          placeholder="Optional"
-                        />
-                      </div>
-                      <div className="flex flex-wrap gap-2">
+
+                      <div className="flex items-center gap-2">
                         <button
-                          type="submit"
-                          className={shellButton("primary")}
-                          disabled={savingProject || !currentProject}
+                          type="button"
+                          className="inline-flex h-10 items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                          onClick={() => setCreateServiceOpen(true)}
+                          disabled={!currentProject}
                         >
-                          <AppIcon icon={CheckmarkCircle02Icon} size={16} />
-                          Save
+                          <AppIcon icon={Add01Icon} size={15} />
+                          New service
                         </button>
                         <button
                           type="button"
-                          className={shellButton("ghost")}
-                          onClick={() => {
-                            setProjectForm({
-                              name: currentProject?.name ?? "",
-                              description: currentProject?.description ?? "",
-                            });
-                            setEditingProject(false);
-                          }}
-                          disabled={savingProject}
+                          className="grid h-10 w-10 place-items-center border border-white/15 text-zinc-500 transition hover:border-rose-400/60 hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-50"
+                          onClick={() => setDeleteProjectOpen(true)}
+                          aria-label="Delete project"
+                          disabled={!currentProject}
                         >
-                          <AppIcon icon={Cancel01Icon} size={16} />
-                          Cancel
+                          <AppIcon icon={Delete02Icon} size={15} />
                         </button>
                       </div>
-                    </form>
-                  ) : (
-                    <div className="mt-4 flex min-w-0 items-start gap-3">
-                      <div className="min-w-0">
-                        <h1 className="font-hero text-3xl font-extrabold tracking-tight text-zinc-100 sm:text-4xl">
-                          {currentProject?.name ?? projectSlug}
-                        </h1>
-                        {currentProject?.description ? (
-                          <p className="mt-2 max-w-2xl font-mono text-sm leading-relaxed text-zinc-500">
-                            {currentProject.description}
-                          </p>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        className="mt-1 inline-flex h-9 w-9 flex-none items-center justify-center border border-zinc-700 text-zinc-300 transition hover:border-[#4FB8B2]/50 hover:bg-[#4FB8B2]/10 hover:text-[#7fe3dd]"
-                        onClick={() => setEditingProject(true)}
-                        aria-label="Edit project"
-                        disabled={!currentProject}
-                      >
-                        <AppIcon icon={PencilEdit02Icon} size={15} />
-                      </button>
                     </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 border border-[#4FB8B2]/50 bg-[#4FB8B2]/15 px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#4FB8B2] transition-colors hover:bg-[#4FB8B2]/25"
-                    onClick={() => setCreateServiceOpen(true)}
-                    disabled={!currentProject}
-                  >
-                    <AppIcon icon={AddSquareIcon} size={16} />
-                    New service
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-10 w-10 items-center justify-center border border-zinc-700 text-zinc-300 transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50"
-                    onClick={() => setDeleteProjectOpen(true)}
-                    aria-label="Delete project"
-                    disabled={!currentProject}
-                  >
-                    <AppIcon icon={Delete02Icon} size={16} />
-                  </button>
-                </div>
-              </section>
+                  </header>
 
-              {error ? (
-                <div className="border border-rose-500/35 bg-rose-950/30 px-4 py-3 font-mono text-xs text-rose-300">
-                  {error}
-                </div>
-              ) : null}
-
-              {currentProject && currentProject.services.length === 0 ? (
-                <section className="border border-zinc-800 bg-zinc-950/60 px-6 py-10 sm:px-8">
-                  <div className="max-w-2xl">
-                    <div className="inline-flex items-center gap-2 border border-zinc-800 bg-zinc-900/50 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-                      <AppIcon icon={CloudServerIcon} size={14} />
-                      Empty project
+                  {error ? (
+                    <div className="mt-6 border-l-2 border-rose-400 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+                      {error}
                     </div>
-                    <h2 className="mt-6 font-hero text-3xl font-extrabold tracking-tight text-zinc-100">
-                      No services yet
-                    </h2>
-                    <p className="mt-3 max-w-lg font-mono text-sm leading-relaxed text-zinc-500">
-                      Add a service and wire up the repo, branch, directory,
-                      deployment history, and runtime surface from here.
-                    </p>
-                    <button
-                      type="button"
-                      className="mt-8 inline-flex items-center justify-center gap-2 border border-[#4FB8B2]/50 bg-[#4FB8B2]/15 px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#4FB8B2] transition-colors hover:bg-[#4FB8B2]/25"
-                      onClick={() => setCreateServiceOpen(true)}
-                    >
-                      <AppIcon icon={AddSquareIcon} size={16} />
-                      Add service
-                    </button>
-                  </div>
-                </section>
-              ) : currentProject ? (
-                <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
-                  {currentProject.services.map((service) => {
-                    const isDatabase = isDatabaseService(service);
-                    const isDockerImage = isDockerImageService(service);
-                    const isFunction = isFunctionService(service);
-                    const visibleUrl = (
-                      service.primaryUrl || service.localUrl
-                    ).replace("127.0.0.1", window.location.hostname);
-                    const visibleLabel = visibleUrl.replace(/^https?:\/\//, "");
-                    const repoLabel =
-                      isFunction
-                        ? `${functionRuntimeLabels[service.functionRuntime ?? "node"]} function`
-                        : service.dockerImage ||
-                          (isDockerImage ? dockerImageForService(service) : "") ||
-                          service.repoFullName ||
-                          service.repoUrl
-                            .replace(/^https?:\/\//, "")
-                            .replace(/^github\.com\//, "");
-                    const rootLabel = service.rootDir
-                      ? service.rootDir
-                      : "repository root";
+                  ) : null}
 
-                    return (
-                      <article
-                        key={service.id}
-                        role="button"
-                        tabIndex={0}
-                        className="group relative border border-zinc-800 bg-zinc-950/60 p-5 text-left transition-colors hover:border-[#4FB8B2]/35 hover:bg-zinc-900/70"
-                        onClick={() => navigateToServiceOverview(service.slug)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            navigateToServiceOverview(service.slug);
-                          }
-                        }}
-                      >
-                        <div className="relative z-10">
-                          <div className="flex items-start gap-4">
-                            <div className="grid h-12 w-12 flex-none place-items-center border border-zinc-700 bg-zinc-900/90 p-3">
-                              <FrameworkMark
-                                framework={service.framework}
-                                size={24}
-                                fallback={
-                                  <AppIcon
-                                    icon={
-                                      isDatabase ? CloudServerIcon : isFunction ? FunctionIcon : isDockerImage ? PackageIcon : Globe02Icon
-                                    }
-                                    size={20}
-                                    className="text-zinc-400"
-                                  />
-                                }
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <h2 className="truncate font-sans text-xl font-semibold tracking-tight text-zinc-100">
-                                    {service.name}
-                                  </h2>
-                                  {isDatabase ? (
-                                    <div className="mt-1 truncate text-sm text-zinc-500 font-mono">
-                                      Connect at {window.location.hostname}:
-                                      {service.hostPort}
-                                    </div>
-                                  ) : visibleUrl ? (
-                                    <div className="mt-1 min-w-0">
-                                      <a
-                                        href={visibleUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="truncate text-sm text-[#4FB8B2] hover:text-[#7fe3dd] transition"
-                                        onClick={(event) =>
-                                          event.stopPropagation()
-                                        }
-                                      >
-                                        {visibleLabel}
-                                      </a>
-                                    </div>
-                                  ) : null}
-                                </div>
-                                <StatusPill status={service.status} />
-                              </div>
-                            </div>
-                          </div>
-
-                          {isDatabase ? (
-                            <>
-                              <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full bg-zinc-800/90 px-3 py-1.5 text-xs font-normal text-zinc-300">
-                                <AppIcon
-                                  icon={CloudServerIcon}
-                                  size={15}
-                                  className="flex-none"
-                                />
-                                <span className="truncate">
-                                  Database Service
-                                </span>
-                              </div>
-
-                              <div className="mt-4 flex flex-wrap items-center gap-2 font-mono text-xs text-zinc-500">
-                                <span>
-                                  {formatTime(
-                                    service.lastDeployedAt ?? service.updatedAt,
-                                  )}
-                                </span>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div className="mt-5 inline-flex max-w-full items-center gap-2 rounded-full bg-zinc-800/90 px-3 py-1.5 text-xs font-normal text-zinc-300">
-                                <AppIcon
-                                  icon={isFunction ? FunctionIcon : isDockerImage ? PackageIcon : GithubIcon}
-                                  size={15}
-                                  className="flex-none"
-                                />
-                                <span className="truncate">{repoLabel}</span>
-                              </div>
-
-                              {isDockerImage || isFunction ? null : (
-                                <div className="mt-4 flex min-w-0 items-center gap-2 text-sm text-zinc-300">
-                                  <AppIcon
-                                    icon={FolderOpenIcon}
-                                    size={16}
-                                    className="flex-none text-zinc-500"
-                                  />
-                                  <span className="truncate">
-                                    Deploys from {rootLabel}
-                                  </span>
-                                </div>
-                              )}
-
-                              <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-xs text-zinc-500">
-                                <span>
-                                  {formatTime(
-                                    service.lastDeployedAt ?? service.updatedAt,
-                                  )}
-                                </span>
-                                {isDockerImage || isFunction ? null : (
-                                  <>
-                                    <span>on</span>
-                                    <span className="inline-flex items-center gap-1.5">
-                                      <AppIcon icon={GitBranchIcon} size={14} />
-                                      {service.branch}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </>
-                          )}
+                  <div className="mt-6">
+                    {currentProject && currentProject.services.length === 0 ? (
+                      <section className="flex min-h-72 items-center justify-center border border-white/10 bg-black px-6 py-12 text-center">
+                        <div>
+                          <AppIcon icon={CloudServerIcon} size={22} className="mx-auto text-zinc-600" />
+                          <h2 className="mt-4 text-lg text-zinc-100">No services</h2>
+                          <p className="mt-1.5 text-sm text-zinc-600">Add the first service to this project.</p>
+                          <button
+                            type="button"
+                            className="mt-5 inline-flex h-9 items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200"
+                            onClick={() => setCreateServiceOpen(true)}
+                          >
+                            <AppIcon icon={Add01Icon} size={14} />
+                            Add service
+                          </button>
                         </div>
-                      </article>
-                    );
-                  })}
-                </section>
-              ) : null}
-            </>
-          )}
+                      </section>
+                    ) : currentProject ? (
+                      <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                        {currentProject.services.map((service) => (
+                          <ProjectServiceCard
+                            key={service.id}
+                            service={service}
+                            onOpen={() => navigateToServiceOverview(service.slug)}
+                          />
+                        ))}
+                      </section>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
         </div>
       </main>
+
       <CreateServiceModal
         projectId={currentProject?.id ?? ""}
         open={createServiceOpen}
@@ -532,6 +309,25 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
         busy={deletingProject}
         onClose={() => setDeleteProjectOpen(false)}
         onConfirm={() => void deleteProject()}
+      />
+      <EditProjectModal
+        open={editingProject}
+        name={projectForm.name}
+        description={projectForm.description}
+        projectSlug={currentProject?.slug ?? projectSlug}
+        saving={savingProject}
+        error={projectEditError}
+        onNameChange={(name) => setProjectForm((current) => ({ ...current, name }))}
+        onDescriptionChange={(description) => setProjectForm((current) => ({ ...current, description }))}
+        onClose={() => {
+          setProjectForm({
+            name: currentProject?.name ?? "",
+            description: currentProject?.description ?? ""
+          });
+          setProjectEditError("");
+          setEditingProject(false);
+        }}
+        onSave={() => void saveProject()}
       />
     </>
   );

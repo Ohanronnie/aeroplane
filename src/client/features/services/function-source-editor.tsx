@@ -12,7 +12,7 @@ const functionSourceHighlightStyle = HighlightStyle.define([
   { tag: [tags.number, tags.bool, tags.null], color: "#f59e0b" },
   { tag: tags.propertyName, color: "#f4f4f5" },
   { tag: tags.keyword, color: "#e879f9" },
-  { tag: tags.function(tags.variableName), color: "#7fe3dd" },
+  { tag: tags.function(tags.variableName), color: "#f4f4f5" },
   { tag: tags.punctuation, color: "#71717a" }
 ]);
 
@@ -45,7 +45,7 @@ const functionSourceEditorTheme = EditorView.theme(
       color: "#71717a"
     },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "rgba(79, 184, 178, 0.22)"
+      backgroundColor: "rgba(255, 255, 255, 0.14)"
     },
     ".cm-activeLine": {
       backgroundColor: "rgba(39, 39, 42, 0.42)"
@@ -98,7 +98,7 @@ export function FunctionSourceEditor({
   }, [disabled, runtime]);
 
   return (
-    <div className="overflow-hidden border border-zinc-700 bg-zinc-950" style={{ height }}>
+    <div className="overflow-hidden border border-white/15 bg-zinc-950" style={{ height }}>
       <CodeMirror
         value={value}
         height="100%"

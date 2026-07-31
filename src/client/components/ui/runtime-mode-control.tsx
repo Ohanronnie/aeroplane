@@ -15,15 +15,15 @@ export function RuntimeModeControl({ value, onChange, disabled = false }: { valu
         <button
           key={mode.value}
           type="button"
-          className={`inline-flex h-10 min-w-0 items-center justify-center gap-2 border px-3 text-sm transition disabled:opacity-60 ${
+          className={`inline-flex h-9 min-w-0 items-center justify-center gap-2 px-3 text-xs transition disabled:opacity-40 ${
             value === mode.value
-              ? "border-[#4FB8B2]/60 bg-[#4FB8B2]/10 text-zinc-100"
-              : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+              ? "bg-white text-black"
+              : "border border-white/15 text-zinc-400 hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
           }`}
           disabled={disabled}
           onClick={() => onChange(mode.value)}
         >
-          <AppIcon icon={mode.icon} size={16} className="shrink-0" />
+          <AppIcon icon={mode.icon} size={14} className="shrink-0" />
           <span className="truncate">{mode.label}</span>
         </button>
       ))}

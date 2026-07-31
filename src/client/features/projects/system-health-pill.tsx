@@ -9,10 +9,14 @@ export function SystemHealthPill({ tools }: { tools: ToolCheck[] }) {
 
   return (
     <div
-      className="inline-flex h-9 items-center gap-2 border border-zinc-800 bg-zinc-900/55 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400"
+      className="flex h-10 w-full items-center gap-2 border border-white/10 bg-white/5 px-3 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-500"
       title={detail}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${allOk ? "bg-[#4FB8B2]" : "bg-amber-400"}`} />
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          allOk ? "bg-white" : "bg-zinc-600"
+        }`}
+      />
       <span>{label}</span>
     </div>
   );

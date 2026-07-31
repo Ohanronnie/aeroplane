@@ -11,6 +11,7 @@ interface AutocompleteInputProps extends Omit<React.InputHTMLAttributes<HTMLInpu
   onChange: (val: string) => void;
   suggestions: Suggestion[];
   className?: string;
+  variant?: "default" | "monochrome";
 }
 
 export function AutocompleteInput({
@@ -137,27 +138,27 @@ export function AutocompleteInput({
       {isOpen && filtered.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute left-0 top-[calc(100%+0.25rem)] z-[70] max-h-56 w-full overflow-y-auto border border-zinc-700 bg-zinc-950/98 shadow-2xl backdrop-blur-md"
+          className="absolute left-0 top-[calc(100%+0.25rem)] z-[70] max-h-56 w-full overflow-y-auto border border-white/15 bg-black shadow-[0_18px_50px_rgba(0,0,0,0.5)]"
         >
           <div className="flex flex-col">
             {filtered.map((item, index) => (
               <button
                 key={item.key}
                 type="button"
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition duration-150 border-b border-zinc-900/60 last:border-b-0 ${
+                className={`flex w-full items-center gap-3 border-b border-white/10 px-3 py-2.5 text-left transition last:border-b-0 ${
                   index === activeIndex
-                    ? "bg-[#4FB8B2]/12 text-[#7fe3dd]"
-                    : "text-zinc-300 hover:bg-zinc-900/70 hover:text-zinc-100"
+                    ? "bg-white text-black"
+                    : "text-zinc-300 hover:bg-white/[0.06] hover:text-white"
                 }`}
                 onClick={() => selectSuggestion(item)}
                 onMouseEnter={() => setActiveIndex(index)}
               >
-                <span className="font-mono text-xs text-zinc-500 font-semibold">{`{ }`}</span>
-                <div className="flex flex-col min-w-0">
-                  <span className="font-mono text-[13px] font-semibold tracking-wide truncate">
+                <span className={`font-mono text-xs ${index === activeIndex ? "text-black/50" : "text-zinc-600"}`}>{`{ }`}</span>
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate font-mono text-xs">
                     {"${" + item.key + "}"}
                   </span>
-                  <span className="text-[10px] text-zinc-400 font-sans mt-0.5 truncate">
+                  <span className={`mt-0.5 truncate text-[10px] ${index === activeIndex ? "text-black/60" : "text-zinc-500"}`}>
                     {item.label}
                   </span>
                 </div>

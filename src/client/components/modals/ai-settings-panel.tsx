@@ -1,8 +1,7 @@
-import { AiBrain01Icon } from "@hugeicons/core-free-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, type AiSettingsStatus } from "../../api";
-import { SectionTitle } from "../ui/primitives";
 import { AiProviderCard } from "./ai-provider-card";
+import { AiProviderDetails } from "./ai-provider-details";
 import {
   aiProviders,
   createAiConnections,
@@ -18,7 +17,17 @@ export function AiSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [busyProviderId, setBusyProviderId] = useState<AiProviderId | null>(null);
 
-  const defaultProvider = defaultProviderId ? aiProviders.find((provider) => provider.id === defaultProviderId) : null;
+  const selectedProvider = useMemo(
+    () => aiProviders.find((provider) => provider.id === selectedProviderId) ?? aiProviders[0],
+    [selectedProviderId]
+  );
+  const selectedConnection = connections[selectedProvider.id];
+  const selectedProviderIsDefault =
+    selectedProvider.id === defaultProviderId &&
+    selectedConnection.selectedModel === defaultModel;
+  const connectedProviderCount = aiProviders.filter(
+    (provider) => connections[provider.id].connected
+  ).length;
 
   function syncAiSettings(ai: AiSettingsStatus) {
     const nextConnections = createAiConnections();
@@ -157,36 +166,63 @@ export function AiSettingsPanel() {
   }
 
   return (
-    <section className="space-y-5 border border-zinc-800 bg-zinc-950/30 p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <SectionTitle icon={AiBrain01Icon} title="AI" />
-        <div className="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-          <span className="text-zinc-600">Default</span>
-          <span className="text-zinc-200">{defaultProvider ? `${defaultProvider.name} / ${defaultModel}` : "None"}</span>
+    <section className="mx-auto max-w-5xl overflow-hidden border border-white/10 bg-black">
+      <div className="grid min-h-[640px] lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="border-b border-white/10 bg-white/[0.02] lg:border-b-0 lg:border-r">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+            <span className="text-sm text-white">Providers</span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">
+              {connectedProviderCount} connected
+            </span>
+          </div>
+
+          <div className="p-2">
+            {aiProviders.map((provider) => (
+              <AiProviderCard
+                key={provider.id}
+                provider={provider}
+                selected={provider.id === selectedProvider.id}
+                connected={connections[provider.id].connected}
+                isDefaultModel={
+                  provider.id === defaultProviderId &&
+                  connections[provider.id].selectedModel === defaultModel
+                }
+                onSelect={() => selectProvider(provider.id)}
+              />
+            ))}
+          </div>
+        </aside>
+
+        <div className="min-w-0 p-5 sm:p-7 lg:p-8">
+          {credentialError ? (
+            <div className="mb-5 border-l-2 border-rose-400 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+              {credentialError}
+            </div>
+          ) : null}
+
+          {loading ? (
+            <div className="space-y-7" aria-label="Loading AI providers">
+              <div className="h-14 w-48 animate-pulse bg-white/5" />
+              <div className="grid max-w-xl gap-5">
+                <div className="h-11 animate-pulse border border-white/10 bg-white/[0.03]" />
+                <div className="h-11 animate-pulse border border-white/10 bg-white/[0.03]" />
+              </div>
+            </div>
+          ) : (
+            <AiProviderDetails
+              provider={selectedProvider}
+              model={selectedConnection.selectedModel}
+              connected={selectedConnection.connected}
+              keySuffix={selectedConnection.keySuffix}
+              isDefaultModel={selectedProviderIsDefault}
+              updating={busyProviderId === selectedProvider.id}
+              onSelectModel={(modelId) => void updateProviderModel(selectedProvider.id, modelId)}
+              onSaveApiKey={(apiKey) => updateProviderApiKey(selectedProvider.id, apiKey)}
+              onSetDefaultModel={() => void updateDefaultModel(selectedProvider.id)}
+            />
+          )}
         </div>
       </div>
-
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {aiProviders.map((provider) => (
-          <AiProviderCard
-            key={provider.id}
-            provider={provider}
-            selected={provider.id === selectedProviderId}
-            model={connections[provider.id].selectedModel}
-            connected={connections[provider.id].connected}
-            keySuffix={connections[provider.id].keySuffix}
-            isDefaultModel={provider.id === defaultProviderId && connections[provider.id].selectedModel === defaultModel}
-            updating={busyProviderId === provider.id}
-            onSelect={() => selectProvider(provider.id)}
-            onSelectModel={(modelId) => void updateProviderModel(provider.id, modelId)}
-            onSaveApiKey={(apiKey) => updateProviderApiKey(provider.id, apiKey)}
-            onSetDefaultModel={() => void updateDefaultModel(provider.id)}
-          />
-        ))}
-      </div>
-
-      {loading ? <div className="border border-zinc-800 bg-zinc-900/55 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">Loading AI providers...</div> : null}
-      {credentialError ? <div className="border border-rose-500/35 bg-rose-950/25 px-3 py-2 font-mono text-[10px] text-rose-200">{credentialError}</div> : null}
     </section>
   );
 }

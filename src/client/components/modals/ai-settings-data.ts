@@ -20,7 +20,6 @@ export type AiProviderDefinition = {
   name: string;
   apiKeyPlaceholder: string;
   logoUrl: string;
-  logoFrameClass: string;
   models: AiProviderModel[];
 };
 
@@ -47,23 +46,11 @@ const logoUrls: Record<AiProviderId, string> = {
   moonshot: moonshotLogoUrl
 };
 
-const logoFrameClasses: Record<AiProviderId, string> = {
-  openai: "border-emerald-400/25 bg-emerald-500/10",
-  anthropic: "border-orange-400/25 bg-orange-500/10",
-  google: "border-sky-400/25 bg-sky-500/10",
-  mistral: "border-violet-400/25 bg-violet-500/10",
-  groq: "border-amber-400/25 bg-amber-500/10",
-  deepseek: "border-cyan-400/25 bg-cyan-500/10",
-  xai: "border-zinc-500/30 bg-zinc-100/10",
-  moonshot: "border-blue-400/25 bg-blue-500/10"
-};
-
 export const aiProviders: AiProviderDefinition[] = aiProviderCatalog.map((provider) => ({
   id: provider.id,
   name: provider.name,
   apiKeyPlaceholder: provider.apiKeyPlaceholder,
   logoUrl: logoUrls[provider.id],
-  logoFrameClass: logoFrameClasses[provider.id],
   models: [...provider.models]
 }));
 

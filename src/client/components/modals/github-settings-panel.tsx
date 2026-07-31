@@ -9,7 +9,7 @@ import {
 import { FormEvent, useEffect, useState } from "react";
 import { api, type GitHubSettingsStatus } from "../../api";
 import { startGitHubAppManifestFlow } from "../../lib/github-app-manifest";
-import { AppIcon, FieldLabel, FormInput, shellButton, statusClass } from "../ui/primitives";
+import { AppIcon, FieldLabel, FormInput } from "../ui/primitives";
 
 type GitHubFormState = {
   githubAccessToken: string;
@@ -62,6 +62,7 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
   const [github, setGithub] = useState<GitHubSettingsStatus>(emptyGithubSettings);
   const [form, setForm] = useState<GitHubFormState>(() => formFromSettings(emptyGithubSettings));
   const [editing, setEditing] = useState(false);
+  const [manualConfigurationOpen, setManualConfigurationOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -70,7 +71,6 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
 
   const connected = github.status.connected || github.status.installed || github.status.mode === "token";
   const appConfigured = github.status.appConfigured || Boolean(github.settings.githubAppId || github.settings.githubAppPrivateKeyConfigured);
-  const status = connected ? "active" : appConfigured ? "building" : "idle";
 
   useEffect(() => {
     if (!open) return;
@@ -84,6 +84,7 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
         setGithub(result);
         setForm(formFromSettings(result));
         setEditing(!result.status.connected && !result.status.installed && result.status.mode !== "token");
+        setManualConfigurationOpen(false);
         setDisconnecting(false);
       })
       .catch((issue) => {
@@ -113,6 +114,7 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
       setGithub(result);
       setForm(formFromSettings(result));
       setEditing(false);
+      setManualConfigurationOpen(false);
       setDisconnecting(false);
       setSuccess(result.statusError ? `GitHub settings saved. ${result.statusError}` : "GitHub settings saved.");
     } catch (issue) {
@@ -137,6 +139,7 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
       setGithub(refreshed);
       setForm(formFromSettings(refreshed));
       setEditing(false);
+      setManualConfigurationOpen(false);
       setDisconnecting(false);
       setSuccess("GitHub App created and connected. Install it on your repositories to finish.");
     } catch (issue) {
@@ -156,6 +159,7 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
       setGithub(result);
       setForm(formFromSettings(result));
       setEditing(true);
+      setManualConfigurationOpen(false);
       setDisconnecting(false);
       setSuccess("GitHub configuration removed.");
     } catch (issue) {
@@ -166,185 +170,135 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
   }
 
   return (
-    <div className="space-y-5">
+    <section className="mx-auto max-w-5xl overflow-hidden border border-white/10 bg-black">
       {!editing ? (
-        <section className="border border-zinc-800 bg-zinc-950/45 p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd]">
-                <AppIcon icon={GithubIcon} size={18} />
-              </div>
+        <div className="p-5 sm:p-7 lg:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-4">
+              <AppIcon icon={GithubIcon} size={32} className="shrink-0 text-white" />
               <div>
-                <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">GitHub integration</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h3 className="font-hero text-xl tracking-tight text-zinc-100">{modeLabel(github)}</h3>
-                  <span className={`px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] ${statusClass(status)}`}>
+                <h2 className="text-2xl tracking-[-0.03em] text-white">{modeLabel(github)}</h2>
+                <div className="mt-2 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em]">
+                  <span
+                    className={`h-1.5 w-1.5 ${
+                      connected
+                        ? "bg-emerald-400"
+                        : appConfigured
+                          ? "bg-amber-400"
+                          : "border border-zinc-600"
+                    }`}
+                  />
+                  <span className={connected ? "text-emerald-300" : appConfigured ? "text-amber-300" : "text-zinc-500"}>
                     {connected ? "Connected" : appConfigured ? "Needs install" : "Not configured"}
                   </span>
                 </div>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
-                  Configure the GitHub credentials Aeroplane uses to browse repositories, read branches, and receive deployment webhooks.
-                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-[#4FB8B2]/45 hover:bg-[#4FB8B2]/10 hover:text-[#7fe3dd]" onClick={() => setEditing(true)} title="Edit GitHub settings" aria-label="Edit GitHub settings">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center border border-white/15 text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.06] hover:text-white"
+                onClick={() => {
+                  setEditing(true);
+                  setManualConfigurationOpen(false);
+                }}
+                title="Edit GitHub settings"
+                aria-label="Edit GitHub settings"
+              >
                 <AppIcon icon={PencilEdit02Icon} size={15} />
               </button>
               {connected || appConfigured ? (
-                <button type="button" className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300 transition hover:border-rose-500/45 hover:bg-rose-500/10 hover:text-rose-300" onClick={() => setDisconnecting(true)} title="Disconnect GitHub" aria-label="Disconnect GitHub">
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center border border-white/15 text-zinc-500 transition hover:border-rose-400/60 hover:bg-rose-400/10 hover:text-rose-300"
+                  onClick={() => setDisconnecting(true)}
+                  title="Disconnect GitHub"
+                  aria-label="Disconnect GitHub"
+                >
                   <AppIcon icon={Delete02Icon} size={15} />
                 </button>
               ) : null}
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="border border-zinc-800 bg-zinc-900/50 p-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">Mode</div>
-              <div className="mt-2 font-mono text-xs text-zinc-200">{github.status.mode}</div>
+          <p className="mt-6 max-w-2xl text-sm leading-6 text-zinc-500">
+            GitHub provides repository access, branch discovery, and deployment webhooks.
+          </p>
+
+          <div className="mt-7 max-w-2xl border-y border-white/10">
+            <div className="grid gap-2 border-b border-white/10 py-4 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-zinc-600">Mode</div>
+              <div className="text-sm capitalize text-zinc-300">{github.status.mode}</div>
             </div>
-            <div className="border border-zinc-800 bg-zinc-900/50 p-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">Installations</div>
-              <div className="mt-2 font-mono text-xs text-zinc-200">{github.status.installationCount}</div>
-            </div>
-            <div className="border border-zinc-800 bg-zinc-900/50 p-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">Env file</div>
-              <div className="mt-2 truncate font-mono text-xs text-zinc-200">{github.settings.envPath || "Not available"}</div>
+            <div className="grid gap-2 border-b border-white/10 py-4 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center">
+              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-zinc-600">Installations</div>
+              <div className="text-sm text-zinc-300">{github.status.installationCount}</div>
             </div>
           </div>
 
           {github.status.mode === "app" && github.status.installUrl && !github.status.installed ? (
-            <a href={github.status.installUrl} target="_blank" rel="noreferrer" className={`${shellButton("primary")} mt-5`}>
+            <a
+              href={github.status.installUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 inline-flex min-h-10 w-fit items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200"
+            >
               <AppIcon icon={GithubIcon} size={15} />
               Install GitHub App
             </a>
           ) : null}
 
           {disconnecting ? (
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border border-rose-500/35 bg-rose-950/20 px-4 py-3">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-l-2 border-rose-400 bg-rose-400/10 px-4 py-3">
               <div>
-                <div className="text-sm font-semibold text-rose-100">Disconnect GitHub?</div>
-                <div className="mt-1 text-xs text-rose-200/75">Repository browsing and GitHub webhooks will stop until GitHub is configured again.</div>
+                <div className="text-sm text-rose-100">Disconnect GitHub?</div>
+                <div className="mt-1 text-xs text-rose-200/70">Repository browsing and webhooks will stop.</div>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" className="inline-flex h-9 w-9 items-center justify-center border border-rose-500/40 bg-rose-500/10 text-rose-200" onClick={() => void disconnect()} disabled={busy} title="Yes" aria-label="Yes">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center border border-rose-400/50 text-rose-200 transition hover:bg-rose-400/10"
+                  onClick={() => void disconnect()}
+                  disabled={busy}
+                  title="Confirm disconnect"
+                  aria-label="Confirm disconnect"
+                >
                   <AppIcon icon={CheckmarkCircle02Icon} size={16} />
                 </button>
-                <button type="button" className="inline-flex h-9 w-9 items-center justify-center border border-zinc-700 bg-zinc-900 text-zinc-300" onClick={() => setDisconnecting(false)} disabled={busy} title="No" aria-label="No">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center border border-white/15 text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05]"
+                  onClick={() => setDisconnecting(false)}
+                  disabled={busy}
+                  title="Cancel"
+                  aria-label="Cancel"
+                >
                   <AppIcon icon={Cancel01Icon} size={16} />
                 </button>
               </div>
             </div>
           ) : null}
-        </section>
+        </div>
       ) : null}
 
       {editing ? (
-        <form onSubmit={saveSettings} className="space-y-5 border border-zinc-800 bg-zinc-950/45 p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd]">
-                <AppIcon icon={GithubIcon} size={18} />
-              </div>
+        <form onSubmit={saveSettings} className="p-5 sm:p-7 lg:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-4">
+              <AppIcon icon={GithubIcon} size={32} className="shrink-0 text-white" />
               <div>
-                <h3 className="font-hero text-lg tracking-tight text-zinc-100">Configure GitHub</h3>
-                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-400">
-                  Use either a GitHub App or a personal access token. App credentials are preferred for repository installs and webhooks.
-                </p>
+                <h2 className="text-2xl tracking-[-0.03em] text-white">Configure GitHub</h2>
+                <p className="mt-1.5 text-sm text-zinc-500">Connect with a GitHub App or enter credentials manually.</p>
               </div>
             </div>
-            <a
-              href="https://github.com/settings/apps/new"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-9 w-fit items-center justify-center gap-2 border border-[#4FB8B2]/45 bg-[#4FB8B2]/12 px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9af4ee] transition hover:bg-[#4FB8B2]/20"
-            >
-              <AppIcon icon={LinkSquare02Icon} size={14} />
-              Create GitHub App
-            </a>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 px-4 py-3">
-            <div className="min-w-0">
-              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#7fe3dd]">One-click connect</div>
-              <div className="text-sm text-zinc-200">Create the GitHub App and fill in every credential automatically.</div>
-            </div>
-            <button type="button" onClick={() => void connectOneClick()} disabled={connecting || busy} className={shellButton("primary")}>
-              <AppIcon icon={GithubIcon} size={15} />
-              {connecting ? "Connecting…" : "Connect with GitHub"}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
-            <span className="h-px flex-1 bg-zinc-800" />
-            or enter manually
-            <span className="h-px flex-1 bg-zinc-800" />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <FieldLabel>GITHUB_ACCESS_TOKEN</FieldLabel>
-              <FormInput
-                type="password"
-                value={form.githubAccessToken}
-                onChange={(event) => setForm({ ...form, githubAccessToken: event.target.value })}
-                placeholder="GitHub personal access token"
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <FieldLabel>GITHUB_WEBHOOK_SECRET</FieldLabel>
-              <FormInput
-                type="password"
-                value={form.githubWebhookSecret}
-                onChange={(event) => setForm({ ...form, githubWebhookSecret: event.target.value })}
-                placeholder="Webhook secret"
-                autoComplete="off"
-              />
-            </div>
-            <div>
-              <FieldLabel>GITHUB_APP_ID</FieldLabel>
-              <FormInput value={form.githubAppId} onChange={(event) => setForm({ ...form, githubAppId: event.target.value })} placeholder="123456" />
-            </div>
-            <div>
-              <FieldLabel>GITHUB_APP_CLIENT_ID</FieldLabel>
-              <FormInput value={form.githubAppClientId} onChange={(event) => setForm({ ...form, githubAppClientId: event.target.value })} placeholder="Iv1.xxxxx" />
-            </div>
-            <div>
-              <FieldLabel>GITHUB_APP_SLUG</FieldLabel>
-              <FormInput value={form.githubAppSlug} onChange={(event) => setForm({ ...form, githubAppSlug: event.target.value })} placeholder="aeroplane" />
-            </div>
-            <div className="flex items-end">
-              <p className="font-mono text-[10px] leading-relaxed text-zinc-500">
-                Leave masked secrets unchanged to keep existing values. Clear a masked token or webhook secret to remove it.
-              </p>
-            </div>
-            <div className="md:col-span-2">
-              <FieldLabel>GITHUB_APP_PRIVATE_KEY</FieldLabel>
-              <textarea
-                value={form.githubAppPrivateKey}
-                onChange={(event) => setForm({ ...form, githubAppPrivateKey: event.target.value })}
-                placeholder={github.settings.githubAppPrivateKeyConfigured ? "Leave blank to keep current private key" : "-----BEGIN PRIVATE KEY-----"}
-                className="min-h-28 w-full resize-y border border-zinc-700 bg-zinc-900 px-3 py-3 font-mono text-xs text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-[#4FB8B2]/60"
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" className={shellButton("primary")} disabled={busy}>
-              <AppIcon icon={GithubIcon} size={15} />
-              {busy ? "Saving..." : "Save GitHub settings"}
-            </button>
             {connected || appConfigured ? (
               <button
                 type="button"
-                className={shellButton("ghost")}
+                className="inline-flex min-h-10 w-fit items-center justify-center border border-white/15 px-4 text-sm text-zinc-400 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
                 onClick={() => {
                   setForm(formFromSettings(github));
+                  setManualConfigurationOpen(false);
                   setEditing(false);
                 }}
                 disabled={busy}
@@ -353,17 +307,153 @@ export function GitHubSettingsPanel({ open }: { open: boolean }) {
               </button>
             ) : null}
           </div>
+
+          <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-y border-white/10 py-5">
+            <div className="min-w-0">
+              <div className="text-sm text-zinc-200">Connect automatically</div>
+              <div className="mt-1 text-xs text-zinc-500">Create and configure the GitHub App in one step.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void connectOneClick()}
+              disabled={connecting || busy}
+              className="inline-flex min-h-10 w-fit items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:cursor-wait disabled:opacity-50"
+            >
+              <AppIcon icon={GithubIcon} size={15} />
+              {connecting ? "Connecting…" : "Connect with GitHub"}
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-4 border-b border-white/10 py-5 text-left text-sm text-zinc-300 transition hover:text-white"
+            onClick={() => setManualConfigurationOpen((current) => !current)}
+            aria-expanded={manualConfigurationOpen}
+          >
+            <span>Manual configuration</span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-500">
+              {manualConfigurationOpen ? "Hide" : "Open"}
+            </span>
+          </button>
+
+          {manualConfigurationOpen ? (
+            <div className="max-w-xl pt-6">
+              <a
+                href="https://github.com/settings/apps/new"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 w-fit items-center justify-center gap-2 border border-white/15 px-3.5 text-sm text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
+              >
+                <AppIcon icon={LinkSquare02Icon} size={14} />
+                Create GitHub App
+              </a>
+
+              <div className="mt-6 grid gap-5">
+                <div>
+                  <FieldLabel>GITHUB_ACCESS_TOKEN</FieldLabel>
+                  <FormInput
+                    type="password"
+                    value={form.githubAccessToken}
+                    onChange={(event) => setForm({ ...form, githubAccessToken: event.target.value })}
+                    placeholder="GitHub personal access token"
+                    autoComplete="off"
+                    variant="monochrome"
+                    className="border-white/15 bg-white/[0.03]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>GITHUB_WEBHOOK_SECRET</FieldLabel>
+                  <FormInput
+                    type="password"
+                    value={form.githubWebhookSecret}
+                    onChange={(event) => setForm({ ...form, githubWebhookSecret: event.target.value })}
+                    placeholder="Webhook secret"
+                    autoComplete="off"
+                    variant="monochrome"
+                    className="border-white/15 bg-white/[0.03]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>GITHUB_APP_ID</FieldLabel>
+                  <FormInput
+                    value={form.githubAppId}
+                    onChange={(event) => setForm({ ...form, githubAppId: event.target.value })}
+                    placeholder="123456"
+                    variant="monochrome"
+                    className="border-white/15 bg-white/[0.03]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>GITHUB_APP_CLIENT_ID</FieldLabel>
+                  <FormInput
+                    value={form.githubAppClientId}
+                    onChange={(event) => setForm({ ...form, githubAppClientId: event.target.value })}
+                    placeholder="Iv1.xxxxx"
+                    variant="monochrome"
+                    className="border-white/15 bg-white/[0.03]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>GITHUB_APP_SLUG</FieldLabel>
+                  <FormInput
+                    value={form.githubAppSlug}
+                    onChange={(event) => setForm({ ...form, githubAppSlug: event.target.value })}
+                    placeholder="aeroplane"
+                    variant="monochrome"
+                    className="border-white/15 bg-white/[0.03]"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>GITHUB_APP_PRIVATE_KEY</FieldLabel>
+                  <textarea
+                    value={form.githubAppPrivateKey}
+                    onChange={(event) => setForm({ ...form, githubAppPrivateKey: event.target.value })}
+                    placeholder={github.settings.githubAppPrivateKeyConfigured ? "Leave blank to keep current private key" : "-----BEGIN PRIVATE KEY-----"}
+                    className="min-h-32 w-full resize-y border border-white/15 bg-white/[0.03] px-3 py-3 font-mono text-xs text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-white focus:ring-2 focus:ring-white/10"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+
+              <p className="mt-3 text-xs leading-5 text-zinc-500">
+                Leave masked secrets unchanged to keep existing values.
+              </p>
+
+              <div className="mt-7 flex flex-wrap items-center gap-2">
+                <button
+                  type="submit"
+                  className="inline-flex min-h-10 w-fit items-center justify-center bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:cursor-wait disabled:opacity-50"
+                  disabled={busy}
+                >
+                  {busy ? "Saving..." : "Save GitHub settings"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </form>
       ) : null}
 
-      {github.statusError ? <div className="border border-amber-500/35 bg-amber-950/20 px-3.5 py-2.5 font-mono text-[10px] text-amber-200">{github.statusError}</div> : null}
-      {error ? <div className="border border-rose-500/35 bg-rose-950/30 px-3.5 py-2.5 font-mono text-[10px] text-rose-300">{error}</div> : null}
-      {success ? (
-        <div className="flex items-center gap-2 border border-emerald-500/35 bg-emerald-950/30 px-3.5 py-2.5 font-mono text-[10px] text-emerald-300">
-          <AppIcon icon={CheckmarkCircle02Icon} size={13} />
-          {success}
+      {github.statusError || error || success ? (
+        <div className="border-t border-white/10 px-5 pb-5 sm:px-7 sm:pb-7 lg:px-8 lg:pb-8">
+          {github.statusError ? (
+            <div className="mt-5 border-l-2 border-amber-400 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+              {github.statusError}
+            </div>
+          ) : null}
+          {error ? (
+            <div className="mt-5 border-l-2 border-rose-400 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+              {error}
+            </div>
+          ) : null}
+          {success ? (
+            <div className="mt-5 flex items-center gap-2 border-l-2 border-emerald-400 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
+              <AppIcon icon={CheckmarkCircle02Icon} size={14} />
+              {success}
+            </div>
+          ) : null}
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }

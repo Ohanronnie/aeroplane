@@ -1,6 +1,6 @@
-import { AddSquareIcon, Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useMemo, useState } from "react";
-import { AppIcon, FormInput, shellButton } from "../../components/ui/primitives";
+import { AppIcon, FormInput } from "../../components/ui/primitives";
 
 export type EnvironmentVariableSuggestionItem = {
   id: string;
@@ -69,11 +69,11 @@ export function EnvironmentVariableSuggestions({
   }
 
   return (
-    <div className="space-y-3 border border-zinc-800 bg-zinc-950/45 p-3">
-      <div className="text-sm text-zinc-400">{promptForGroups(groups)}</div>
+    <div className="space-y-3 border border-white/10 p-3">
+      <div className="text-xs text-zinc-500">{promptForGroups(groups)}</div>
       <div className="space-y-2">
         {rows.length === 0 ? (
-          <div className="border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm text-zinc-500">No suggested variables selected.</div>
+          <div className="border border-white/10 px-3 py-3 text-xs text-zinc-500">No suggested variables selected.</div>
         ) : (
           rows.map((row) => (
             <div key={row.id} className="grid gap-2 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.8fr)_32px] lg:items-center">
@@ -82,18 +82,20 @@ export function EnvironmentVariableSuggestions({
                 onChange={(event) => updateRow(row.id, { key: event.target.value })}
                 placeholder="KEY"
                 autoComplete="off"
-                className="h-9 font-mono text-xs uppercase tracking-[0.04em]"
+                variant="monochrome"
+                className="!h-9 border-white/15 bg-black font-mono text-xs uppercase tracking-[0.04em]"
               />
               <FormInput
                 value={row.value}
                 onChange={(event) => updateRow(row.id, { value: event.target.value })}
                 placeholder="VALUE"
                 autoComplete="new-password"
-                className="h-9 font-mono text-xs"
+                variant="monochrome"
+                className="!h-9 border-white/15 bg-black font-mono text-xs"
               />
               <button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center text-zinc-500 transition hover:bg-zinc-900 hover:text-zinc-100"
+                className="inline-flex h-9 w-9 items-center justify-center text-zinc-600 transition hover:bg-rose-500/10 hover:text-rose-300"
                 onClick={() => removeRow(row.id)}
                 aria-label={`Remove ${row.key || "suggested variable"}`}
               >
@@ -104,8 +106,7 @@ export function EnvironmentVariableSuggestions({
         )}
       </div>
       <div className="flex justify-end">
-        <button type="button" className={shellButton("primary")} onClick={addRows} disabled={rows.length === 0}>
-          <AppIcon icon={AddSquareIcon} size={15} />
+        <button type="button" className="inline-flex h-8 items-center justify-center bg-white px-3 text-xs text-black transition hover:bg-zinc-200 disabled:opacity-40" onClick={addRows} disabled={rows.length === 0}>
           Add
         </button>
       </div>

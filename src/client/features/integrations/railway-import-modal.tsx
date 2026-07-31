@@ -9,14 +9,14 @@ import {
   Search01Icon,
   WorkflowSquare07Icon,
   Globe02Icon,
-  Settings01Icon
 } from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
 import { api } from "../../api";
-import { ModalShell } from "../../components/modals/modal-shell";
+import { RailwayLogo } from "../../components/icons/railway-logo";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dropdown } from "../../components/ui/dropdown";
 import { AppIcon, FieldLabel, FormInput, shellButton } from "../../components/ui/primitives";
+import { ProviderImportShell } from "./provider-import-shell";
 import { RailwayMigrationOptions } from "./railway-migration-options";
 
 interface RailwayProject {
@@ -30,6 +30,7 @@ interface RailwayImportModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  onBackToProviders?: () => void;
 }
 
 type RailwayServiceKind = "git" | "database" | "docker-image" | "unsupported";
@@ -71,13 +72,18 @@ function serviceKindIcon(kind: RailwayServiceKind) {
 }
 
 function serviceKindClass(kind: RailwayServiceKind) {
-  if (kind === "database") return "border-[#4FB8B2]/30 bg-[#4FB8B2]/5 text-[#4FB8B2]";
-  if (kind === "docker-image") return "border-sky-500/30 bg-sky-500/5 text-sky-300";
-  if (kind === "git") return "border-purple-500/30 bg-purple-500/5 text-purple-400";
-  return "border-amber-500/35 bg-amber-500/10 text-amber-200";
+  if (kind === "unsupported") {
+    return "border-white/10 bg-white/5 text-zinc-600";
+  }
+  return "border-white/15 bg-black/20 text-zinc-300";
 }
 
-export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportModalProps) {
+export function RailwayImportModal({
+  open,
+  onClose,
+  onSuccess,
+  onBackToProviders,
+}: RailwayImportModalProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState<"auth" | "select" | "configure" | "importing" | "success">("auth");
   const [apiToken, setApiToken] = useState("");
@@ -192,7 +198,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
     }
   }
 
-  function handleClose() {
+  function resetState() {
     setStep("auth");
     setApiToken("");
     setProjects([]);
@@ -205,38 +211,39 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
     setSelectedEnvironmentId("");
     setAutoDeploy(true);
     setImportDatabaseData(true);
+  }
+
+  function handleClose() {
+    resetState();
     onClose();
   }
 
-  const modalIcon =
-    step === "auth"
-      ? Settings01Icon
-      : step === "select"
-      ? Search01Icon
-      : step === "configure"
-      ? Settings01Icon
-      : step === "importing"
-      ? WorkflowSquare07Icon
-      : CheckmarkCircle02Icon;
+  function handleBackToProviders() {
+    resetState();
+    if (onBackToProviders) {
+      onBackToProviders();
+    } else {
+      onClose();
+    }
+  }
 
   return (
-    <ModalShell
+    <ProviderImportShell
       open={open}
       onClose={handleClose}
-      icon={modalIcon}
-      title="Import Project from Railway"
-      meta={
+      logo={<RailwayLogo className="h-8 w-8" />}
+      title="Import from Railway"
+      stepLabel={
         step === "auth"
-          ? "Step 1: Authenticate"
+          ? "01 / Authenticate"
           : step === "select"
-          ? "Step 2: Choose Project"
+          ? "02 / Choose project"
           : step === "configure"
-          ? "Step 3: Configure Migration"
+          ? "03 / Configure migration"
           : step === "importing"
-          ? "Migration In Progress"
-          : "Migration Complete"
+          ? "Migration in progress"
+          : "Migration complete"
       }
-      width="max-w-xl"
       bodyClassName="min-h-0 flex flex-1 flex-col overflow-hidden"
     >
       {step === "auth" && (
@@ -252,12 +259,13 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
                 href="https://railway.app/account/tokens"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[10px] font-mono text-[#E93D82] hover:underline uppercase tracking-wider"
+                className="font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-400 transition hover:text-white"
               >
                 Get token →
               </a>
             </div>
             <FormInput
+              variant="monochrome"
               type="password"
               value={apiToken}
               onChange={(e) => setApiToken(e.target.value)}
@@ -268,6 +276,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
             />
             <div className="mt-3">
               <Checkbox
+                variant="monochrome"
                 checked={rememberToken}
                 onChange={setRememberToken}
                 disabled={busy}
@@ -281,18 +290,24 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
           </div>
 
           {error && (
-            <div className="border border-rose-500/35 bg-rose-950/20 px-4 py-3 text-xs text-rose-300 font-mono">
+            <div className="border-l-2 border-white bg-white/10 px-4 py-3 font-mono text-xs text-zinc-200">
               {error}
             </div>
           )}
 
-          <div className="flex justify-end gap-3 border-t border-zinc-800 pt-4 mt-5">
-            <button type="button" className={shellButton("ghost")} onClick={handleClose} disabled={busy}>
-              Cancel
+          <div className="mt-6 flex justify-between gap-3 border-t border-white/10 pt-5">
+            <button
+              type="button"
+              className={shellButton("ghost")}
+              onClick={handleBackToProviders}
+              disabled={busy}
+            >
+              <AppIcon icon={ArrowLeft01Icon} size={16} />
+              Back
             </button>
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-2 border border-[#E93D82]/50 bg-[#E93D82]/15 px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#E93D82] transition hover:bg-[#E93D82]/25 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center bg-white px-5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-black transition hover:bg-zinc-200 disabled:opacity-60"
               onClick={handleConnect}
               disabled={busy || !apiToken.trim()}
             >
@@ -307,6 +322,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
           <div className="relative mb-4">
             <AppIcon icon={Search01Icon} size={16} className="pointer-events-none absolute left-3 top-3 text-zinc-500" />
             <FormInput
+              variant="monochrome"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search Railway projects"
@@ -315,12 +331,12 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
           </div>
 
           {error && (
-            <div className="border border-rose-500/35 bg-rose-950/20 px-4 py-3 text-xs text-rose-300 font-mono mb-4">
+            <div className="mb-4 border-l-2 border-white bg-white/10 px-4 py-3 font-mono text-xs text-zinc-200">
               {error}
             </div>
           )}
 
-          <div className="overflow-hidden border border-zinc-700 bg-zinc-900/85 flex-1 min-h-0">
+          <div className="min-h-0 flex-1 overflow-hidden border border-white/10 bg-black/20">
             <div className="max-h-[300px] overflow-y-auto">
               {filteredProjects.length === 0 ? (
                 <div className="px-5 py-8 text-center font-mono text-xs text-zinc-400">
@@ -330,7 +346,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
                 filteredProjects.map((project) => (
                   <div
                     key={project.id}
-                    className="flex items-center justify-between gap-4 border-b border-zinc-800 px-4 py-3.5 last:border-b-0"
+                    className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3.5 last:border-b-0"
                   >
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-zinc-100">{project.name}</div>
@@ -340,7 +356,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
                     </div>
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center gap-2 border border-[#E93D82]/50 bg-[#E93D82]/12 px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#E93D82] transition hover:bg-[#E93D82]/20"
+                      className="inline-flex h-9 items-center justify-center border border-white/15 px-3 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-300 transition hover:border-white hover:bg-white hover:text-black"
                       onClick={() => void handleSelectProject(project)}
                       disabled={busy}
                     >
@@ -352,7 +368,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
             </div>
           </div>
 
-          <div className="flex justify-start border-t border-zinc-800 pt-4 mt-5">
+          <div className="mt-5 flex justify-start border-t border-white/10 pt-5">
             <button
               type="button"
               className={shellButton("ghost")}
@@ -372,10 +388,11 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
             Customize how <strong>{selectedProject?.name}</strong> is migrated to your self-hosted stack.
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel>Target Environment</FieldLabel>
               <Dropdown
+                variant="monochrome"
                 value={selectedEnvironmentId}
                 onChange={(environmentId) => {
                   setSelectedEnvironmentId(environmentId);
@@ -415,8 +432,8 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
 
           <div>
             <FieldLabel>Services to Import ({selectedServiceIds.length} selected)</FieldLabel>
-            <div className="border border-zinc-700 bg-zinc-900/85 overflow-hidden">
-              <div className="max-h-[160px] overflow-y-auto divide-y divide-zinc-800">
+            <div className="overflow-hidden border border-white/10 bg-black/20">
+              <div className="max-h-[160px] divide-y divide-white/10 overflow-y-auto">
                 {projectDetails.services.map((service) => {
                   const preview = servicePreviewForEnvironment(service, selectedEnvironmentId);
                   const isChecked = selectedServiceIds.includes(service.id);
@@ -425,9 +442,10 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
                   return (
                     <div
                       key={service.id}
-                      className={`flex items-center justify-between gap-3 px-4 py-2.5 transition-colors ${isUnsupported ? "bg-amber-950/10" : "hover:bg-zinc-800/40"}`}
+                      className={`flex items-center justify-between gap-3 px-4 py-2.5 transition-colors ${isUnsupported ? "bg-white/[0.03]" : "hover:bg-white/5"}`}
                     >
                       <Checkbox
+                        variant="monochrome"
                         checked={isChecked}
                         onChange={() => {
                           if (isUnsupported) return;
@@ -442,7 +460,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
                       >
                         <span className="grid min-w-0 gap-1">
                           <span className="text-xs font-semibold text-zinc-100 font-mono">{service.name}</span>
-                          <span className={`max-w-[260px] truncate text-[10px] font-mono ${isUnsupported ? "text-amber-200/80" : "text-zinc-500"}`}>
+                          <span className={`max-w-[260px] truncate text-[10px] font-mono ${isUnsupported ? "text-zinc-600" : "text-zinc-500"}`}>
                             {preview.unsupportedReason || preview.sourceLabel}
                           </span>
                         </span>
@@ -459,12 +477,12 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
           </div>
 
           {error && (
-            <div className="border border-rose-500/35 bg-rose-950/20 px-4 py-3 text-xs text-rose-300 font-mono">
+            <div className="border-l-2 border-white bg-white/10 px-4 py-3 font-mono text-xs text-zinc-200">
               {error}
             </div>
           )}
 
-          <div className="flex justify-between gap-3 border-t border-zinc-800 pt-4 mt-5">
+          <div className="mt-5 flex justify-between gap-3 border-t border-white/10 pt-5">
             <button
               type="button"
               className={shellButton("ghost")}
@@ -476,7 +494,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
             </button>
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-2 border border-[#E93D82]/50 bg-[#E93D82]/15 px-5 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#E93D82] transition hover:bg-[#E93D82]/25 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 bg-white px-5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-black transition hover:bg-zinc-200 disabled:opacity-60"
               onClick={handleExecuteImport}
               disabled={busy || selectedServiceIds.length === 0}
             >
@@ -490,8 +508,8 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
       {step === "importing" && (
         <div className="py-8 flex flex-col items-center justify-center text-center space-y-4">
           <div className="relative flex items-center justify-center">
-            <div className="h-12 w-12 rounded-full border-2 border-t-2 border-zinc-700 border-t-[#E93D82] animate-spin" />
-            <AppIcon icon={WorkflowSquare07Icon} size={18} className="absolute text-[#E93D82]" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
+            <AppIcon icon={WorkflowSquare07Icon} size={18} className="absolute text-white" />
           </div>
           <div>
             <h3 className="font-semibold text-zinc-100 text-base">Migrating Project Stacks</h3>
@@ -499,8 +517,8 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
               Importing services from "{selectedProject?.name}"...
             </p>
           </div>
-          <div className="w-64 h-1 border border-zinc-800 bg-zinc-950 overflow-hidden relative">
-            <div className="absolute inset-y-0 bg-gradient-to-r from-[#E93D82] to-[#7871FF] w-1/2 rounded-full animate-marquee" />
+          <div className="relative h-1 w-64 overflow-hidden border border-white/10 bg-black">
+            <div className="absolute inset-y-0 w-1/2 animate-marquee bg-white" />
           </div>
           <div className="text-[10px] text-zinc-500 font-mono space-y-1">
             <div>Fetching services, command overrides, and app variable maps...</div>
@@ -512,7 +530,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
 
       {step === "success" && (
         <div className="py-6 flex flex-col items-center justify-center text-center space-y-5">
-          <div className="h-14 w-14 rounded-full border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black">
             <AppIcon icon={CheckmarkCircle02Icon} size={30} />
           </div>
           <div>
@@ -524,7 +542,7 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
 
           <button
             type="button"
-            className={shellButton("primary")}
+            className="inline-flex h-11 items-center justify-center gap-2 bg-white px-5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-black transition hover:bg-zinc-200"
             onClick={() => {
               handleClose();
               void navigate({ to: "/$projectSlug", params: { projectSlug: importedSlug } });
@@ -535,6 +553,6 @@ export function RailwayImportModal({ open, onClose, onSuccess }: RailwayImportMo
           </button>
         </div>
       )}
-    </ModalShell>
+    </ProviderImportShell>
   );
 }

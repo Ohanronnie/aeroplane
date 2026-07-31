@@ -2,7 +2,7 @@ import { Cancel01Icon, ChatQuestionIcon } from "@hugeicons/core-free-icons";
 import { useState } from "react";
 import type { Deployment, DeploymentLog } from "../../api";
 import { DeployPlaneIcon } from "../../components/icons/deploy-plane-icon";
-import { AppIcon, StatusPill, deploymentCardClass, shellButton } from "../../components/ui/primitives";
+import { AppIcon, statusClass } from "../../components/ui/primitives";
 import { displayDeploymentStatus } from "../../lib/deployment-status";
 import { formatTime, shortSha } from "../../lib/format";
 import { DeploymentFailureExplanationModal } from "./deployment-failure-explanation-modal";
@@ -36,15 +36,35 @@ export function ServiceDeploymentsPanel({
   const failedDeploymentSelected = activeDeployment?.status === "failed";
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
-      <div className="min-h-0 overflow-y-auto pr-1 lg:w-[340px] lg:flex-none">
-        <div className="space-y-3">
-          <button type="button" className={`${shellButton("primary")} w-full`} onClick={onDeploy} disabled={busy === "deploy"}>
-            <DeployPlaneIcon size={15} />
-            {busy === "deploy" ? "Deploying" : "Deploy"}
-          </button>
+    <section className="mx-auto flex h-full min-h-0 w-full max-w-[1440px] flex-col overflow-hidden border border-white/10 bg-black">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-5">
+        <div>
+          <h2 className="text-lg tracking-[-0.03em] text-white">Deployments</h2>
+          <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">
+            {deployments.length} {deployments.length === 1 ? "deployment" : "deployments"}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center justify-center gap-2 bg-white px-3 text-xs text-black transition hover:bg-zinc-200 disabled:opacity-40"
+          onClick={onDeploy}
+          disabled={busy === "deploy"}
+        >
+          <DeployPlaneIcon size={13} />
+          {busy === "deploy" ? "Deploying…" : "Deploy"}
+        </button>
+      </header>
+
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="flex min-h-0 flex-col border-b border-white/10 lg:border-b-0 lg:border-r">
+          <div className="flex h-10 items-center justify-between border-b border-white/10 px-4 font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-600">
+            <span>History</span>
+            <span>{deployments.length}</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
           {deployments.map((deployment) => {
             const displayStatus = displayDeploymentStatus(deployment.status);
+            const selected = deployment.id === activeDeploymentId;
             const buildDuration = formatBuildDuration(
               deployment.startedAt ?? deployment.createdAt,
               deployment.finishedAt,
@@ -54,40 +74,35 @@ export function ServiceDeploymentsPanel({
               <button
                 key={deployment.id}
                 type="button"
-                className={`flex w-full items-center justify-between border px-4 py-3 text-left ${deploymentCardClass(
-                  displayStatus,
-                  deployment.id === activeDeploymentId
-                )}`}
+                className={
+                  selected
+                    ? "flex min-h-14 w-full items-center justify-between gap-3 border-b border-white/10 bg-white/[0.08] px-4 py-3 text-left text-white"
+                    : "flex min-h-14 w-full items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3 text-left text-zinc-400 transition hover:bg-white/[0.04] hover:text-white"
+                }
                 onClick={() => onSelectDeployment(deployment.id)}
               >
                 <div className="min-w-0">
-                  <div className="text-sm font-medium">{shortSha(deployment.commitSha)}</div>
-                  <div
-                    className={`mt-1 text-xs ${
-                      deployment.id === activeDeploymentId
-                        ? displayStatus === "failed"
-                          ? "text-red-700"
-                          : displayStatus === "building" || displayStatus === "queued"
-                            ? "text-amber-700"
-                            : displayStatus === "current"
-                              ? "text-violet-300"
-                            : displayStatus === "active" || displayStatus === "deployed" || displayStatus === "success"
-                              ? "text-emerald-700"
-                              : "text-zinc-300"
-                        : "text-zinc-400"
-                    }`}
-                  >
+                  <div className="font-mono text-xs">{shortSha(deployment.commitSha)}</div>
+                  <div className={`mt-1 text-[10px] ${selected ? "text-zinc-500" : "text-zinc-600"}`}>
                     {formatTime(deployment.createdAt)}
-                    {buildDuration ? ` • Build ${buildDuration}` : ""}
+                    {buildDuration ? ` · ${buildDuration}` : ""}
                   </div>
                 </div>
-                <StatusPill status={displayStatus} />
+                <span className={`shrink-0 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.12em] ${statusClass(displayStatus)}`}>
+                  {displayStatus}
+                </span>
               </button>
             );
           })}
-        </div>
-      </div>
-      <div className="min-h-0 min-w-0 flex-1">
+          {deployments.length === 0 ? (
+            <div className="flex min-h-40 items-center justify-center px-4 text-center text-xs text-zinc-600">
+              No deployments yet.
+            </div>
+          ) : null}
+          </div>
+        </aside>
+
+        <div className="min-h-0 min-w-0">
         <DeploymentLogsPanel
           logs={deploymentLogs}
           title="Deploy output"
@@ -99,28 +114,39 @@ export function ServiceDeploymentsPanel({
           actions={
             activeDeployment && (activeDeployment.status === "queued" || activeDeployment.status === "building") ? (
               <div className="flex flex-wrap justify-end gap-2">
-                <button type="button" className={shellButton("ghost")} onClick={onAbortActiveDeployment} disabled={busy === "abort"}>
-                  <AppIcon icon={Cancel01Icon} size={15} />
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center gap-2 border border-rose-400/40 px-3 text-xs text-rose-300 transition hover:bg-rose-400/10 disabled:opacity-40"
+                  onClick={onAbortActiveDeployment}
+                  disabled={busy === "abort"}
+                >
+                  <AppIcon icon={Cancel01Icon} size={13} />
                   Abort build
                 </button>
               </div>
             ) : failedDeploymentSelected ? (
               <div className="flex flex-wrap justify-end gap-2">
-                <button type="button" className={shellButton("secondary")} onClick={() => setFailureModalOpen(true)}>
-                  <AppIcon icon={ChatQuestionIcon} size={15} />
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center gap-2 border border-white/15 px-3 text-xs text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
+                  onClick={() => setFailureModalOpen(true)}
+                >
+                  <AppIcon icon={ChatQuestionIcon} size={13} />
                   What happened?
                 </button>
               </div>
             ) : undefined
           }
           emptyLabel="Choose a deployment to inspect its build and deploy logs."
+          embedded
         />
+        </div>
       </div>
       <DeploymentFailureExplanationModal
         deployment={activeDeployment}
         open={failureModalOpen && failedDeploymentSelected}
         onClose={() => setFailureModalOpen(false)}
       />
-    </div>
+    </section>
   );
 }

@@ -17,7 +17,7 @@ const unitMultipliers: Record<string, number> = {
 };
 
 const ttlButtonClass =
-  "inline-flex h-6 items-center justify-center border px-2 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-7 items-center justify-center border px-2 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-50";
 
 function displayTtl(ttl: number) {
   if (ttl === -1) return "No expiry";
@@ -80,7 +80,7 @@ export function RedisTtlPopover({
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className="inline-flex h-7 items-center border border-zinc-700 bg-zinc-900/80 px-2.5 font-mono text-[11px] leading-none tracking-[0.04em] text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-100"
+        className="inline-flex h-7 items-center border border-white/10 bg-white/[0.03] px-2.5 font-mono text-[10px] leading-none tracking-[0.04em] text-zinc-500 transition hover:border-white/30 hover:text-white"
         onClick={() => {
           setOpen((current) => !current);
           setUnitOpen(false);
@@ -92,19 +92,19 @@ export function RedisTtlPopover({
       </button>
 
       {open ? (
-        <div className="absolute left-0 top-full z-50 mt-2 w-56 border border-zinc-700 bg-zinc-950 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.45)]" role="dialog" aria-label="Expiration">
-          <div className="text-xs font-semibold text-zinc-100">Expiration</div>
+        <div className="absolute left-0 top-full z-50 mt-2 w-56 border border-white/15 bg-black p-3 shadow-[0_18px_50px_rgba(0,0,0,0.55)]" role="dialog" aria-label="Expiration">
+          <div className="text-xs text-zinc-200">Expiration</div>
           <div className="mt-2 grid w-full grid-cols-[76px_minmax(0,1fr)]">
             <input
               value={value}
               onChange={(event) => setValue(event.target.value)}
-              className="h-7 min-w-0 border border-zinc-700 bg-zinc-900 px-2 font-mono text-xs text-zinc-100 outline-none transition focus:border-[#4FB8B2]/60"
+              className="h-8 min-w-0 border border-white/15 bg-black px-2 font-mono text-xs text-zinc-100 outline-none transition focus:border-white"
               inputMode="numeric"
             />
             <div className="relative">
               <button
                 type="button"
-                className="flex h-7 w-full items-center justify-between gap-1 border border-l-0 border-zinc-700 bg-zinc-900 px-2 text-left text-xs text-zinc-100 outline-none transition hover:border-zinc-500"
+                className="flex h-8 w-full items-center justify-between gap-1 border border-l-0 border-white/15 bg-black px-2 text-left text-xs text-zinc-100 outline-none transition hover:border-white/35"
                 onClick={() => setUnitOpen((current) => !current)}
                 aria-haspopup="listbox"
                 aria-expanded={unitOpen}
@@ -113,7 +113,7 @@ export function RedisTtlPopover({
                 <AppIcon icon={ArrowDown01Icon} size={13} className={`shrink-0 text-zinc-500 transition ${unitOpen ? "rotate-180" : ""}`} />
               </button>
               {unitOpen ? (
-                <div className="absolute left-0 right-0 top-full z-10 mt-1 border border-zinc-700 bg-zinc-950 p-1 shadow-[0_12px_30px_rgba(0,0,0,0.4)]" role="listbox">
+                <div className="absolute left-0 right-0 top-full z-10 mt-1 border border-white/15 bg-black p-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)]" role="listbox">
                   {ttlUnitOptions.map((option) => {
                     const active = option.value === unit;
                     return (
@@ -121,7 +121,7 @@ export function RedisTtlPopover({
                         key={option.value}
                         type="button"
                         className={`block w-full px-2 py-1.5 text-left text-xs transition ${
-                          active ? "bg-[#4FB8B2]/15 text-[#7fe3dd]" : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                          active ? "bg-white text-black" : "text-zinc-400 hover:bg-white/[0.07] hover:text-white"
                         }`}
                         onClick={() => {
                           setUnit(option.value);
@@ -140,13 +140,13 @@ export function RedisTtlPopover({
           </div>
           <p className="mt-2 text-[10px] leading-4 text-zinc-500">TTL deletes keys after a defined period.</p>
           <div className="mt-2.5 flex items-center justify-between gap-2">
-            <button type="button" className={`${ttlButtonClass} border-zinc-700 bg-zinc-900/70 text-zinc-300 hover:border-zinc-500 hover:text-white`} onClick={() => void saveTtl(-1)} disabled={busy}>
+            <button type="button" className={`${ttlButtonClass} border-white/15 text-zinc-400 hover:border-white/35 hover:bg-white/[0.05] hover:text-white`} onClick={() => void saveTtl(-1)} disabled={busy}>
               Persist
             </button>
             <div className="flex gap-2">
               <button
                 type="button"
-                className={`${ttlButtonClass} border-transparent text-zinc-300 hover:bg-zinc-900 hover:text-white`}
+                className={`${ttlButtonClass} border-transparent text-zinc-500 hover:bg-white/[0.05] hover:text-white`}
                 onClick={() => {
                   setOpen(false);
                   setUnitOpen(false);
@@ -155,7 +155,7 @@ export function RedisTtlPopover({
               >
                 Cancel
               </button>
-              <button type="button" className={`${ttlButtonClass} border-[#4FB8B2]/45 bg-[#4FB8B2]/15 text-[#7fe3dd] hover:bg-[#4FB8B2]/25`} onClick={saveFromFields} disabled={busy}>
+              <button type="button" className={`${ttlButtonClass} border-white bg-white text-black hover:bg-zinc-200`} onClick={saveFromFields} disabled={busy}>
                 Save
               </button>
             </div>

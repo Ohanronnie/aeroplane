@@ -1,5 +1,6 @@
-import { Cancel01Icon, Refresh03Icon } from "@hugeicons/core-free-icons";
-import { AppIcon, shellButton, surfaceClass } from "../ui/primitives";
+import { Refresh03Icon } from "@hugeicons/core-free-icons";
+import { SettingsDialog } from "../../features/settings/settings-dialog";
+import { AppIcon } from "../ui/primitives";
 
 type UpdateConfirmationModalProps = {
   applying: boolean;
@@ -10,37 +11,37 @@ type UpdateConfirmationModalProps = {
 };
 
 export function UpdateConfirmationModal({ applying, installType, open, onCancel, onConfirm }: UpdateConfirmationModalProps) {
-  if (!open) return null;
-
   const actionLabel = installType === "image" ? "Pull latest image" : "Update Aeroplane";
 
   return (
-    <div className="fixed inset-0 z-70 grid place-items-center bg-black/55 p-4 backdrop-blur-sm">
-      <div className={surfaceClass("w-full max-w-lg p-5")}>
-        <div className="flex items-start gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center border border-[#4FB8B2]/35 bg-[#4FB8B2]/10 text-[#7fe3dd]">
-            <AppIcon icon={Refresh03Icon} size={18} />
-          </div>
-          <div className="min-w-0">
-            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Confirm update</div>
-            <h3 className="mt-1 font-hero text-xl tracking-tight text-zinc-100">{actionLabel}?</h3>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-              Aeroplane may restart after the update finishes. The dashboard can briefly disconnect while the new build starts.
-            </p>
-          </div>
-        </div>
+    <SettingsDialog open={open} title={actionLabel} onClose={() => {
+      if (!applying) onCancel();
+    }} width="max-w-md">
+      <div>
+        <p className="text-sm leading-relaxed text-zinc-400">
+          Aeroplane may restart after the update. The dashboard can briefly disconnect.
+        </p>
 
-        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
-          <button type="button" className={shellButton("ghost")} onClick={onCancel} disabled={applying}>
-            <AppIcon icon={Cancel01Icon} size={14} />
+        <div className="mt-5 flex items-center justify-end gap-2 border-t border-white/10 pt-4">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center justify-center border border-white/15 px-3.5 text-sm text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] disabled:opacity-50"
+            onClick={onCancel}
+            disabled={applying}
+          >
             Cancel
           </button>
-          <button type="button" className={shellButton("primary")} onClick={onConfirm} disabled={applying}>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-50"
+            onClick={onConfirm}
+            disabled={applying}
+          >
             <AppIcon icon={Refresh03Icon} size={13} className={applying ? "animate-spin" : ""} />
             {applying ? "Starting..." : actionLabel}
           </button>
         </div>
       </div>
-    </div>
+    </SettingsDialog>
   );
 }

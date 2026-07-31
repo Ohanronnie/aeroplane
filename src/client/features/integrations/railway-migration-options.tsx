@@ -28,6 +28,7 @@ export function RailwayMigrationOptions({
   return (
     <div className="flex flex-col justify-end space-y-2.5 pb-1">
       <Checkbox
+        variant="monochrome"
         checked={excludeRailwayVars}
         onChange={onExcludeRailwayVarsChange}
         disabled={busy}
@@ -39,6 +40,7 @@ export function RailwayMigrationOptions({
       </Checkbox>
 
       <Checkbox
+        variant="monochrome"
         checked={importDatabases}
         onChange={onImportDatabasesChange}
         disabled={busy}
@@ -50,6 +52,7 @@ export function RailwayMigrationOptions({
       </Checkbox>
 
       <Checkbox
+        variant="monochrome"
         checked={autoDeploy}
         onChange={onAutoDeployChange}
         disabled={busy}
@@ -61,6 +64,7 @@ export function RailwayMigrationOptions({
       </Checkbox>
 
       <Checkbox
+        variant="monochrome"
         checked={importDatabaseData && canImportDatabaseData}
         onChange={onImportDatabaseDataChange}
         disabled={busy || !canImportDatabaseData}
