@@ -2,13 +2,10 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   Add01Icon,
   CloudServerIcon,
-  CheckmarkCircle02Icon,
-  Cancel01Icon,
   Delete02Icon,
   PencilEdit02Icon
 } from "@hugeicons/core-free-icons";
 import {
-  FormEvent,
   startTransition,
   useCallback,
   useEffect,
@@ -16,9 +13,10 @@ import {
 } from "react";
 import { api, type ProjectCard, type ProjectDetail, type ToolCheck } from "../api";
 import { useAuthStatus } from "../components/auth/auth-context";
-import { AppIcon, FormInput } from "../components/ui/primitives";
+import { AppIcon } from "../components/ui/primitives";
 import { CreateServiceModal } from "../components/modals/create-service-modal";
 import { DeleteProjectModal } from "../components/modals/delete-project-modal";
+import { EditProjectModal } from "../features/projects/edit-project-modal";
 import { ProjectPageSkeleton } from "../features/projects/project-page-skeleton";
 import { ProjectPageToolbar } from "../features/projects/project-page-toolbar";
 import { ProjectServiceCard } from "../features/projects/project-service-card";
@@ -38,6 +36,7 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
   const [deletingProject, setDeletingProject] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
+  const [projectEditError, setProjectEditError] = useState("");
   const [projectForm, setProjectForm] = useState({ name: "", description: "" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -150,11 +149,10 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
     });
   }
 
-  async function saveProject(event: FormEvent) {
-    event.preventDefault();
+  async function saveProject() {
     if (!currentProject) return;
     setSavingProject(true);
-    setError("");
+    setProjectEditError("");
     try {
       const result = await api.updateProject(currentProject.id, {
         name: projectForm.name,
@@ -170,7 +168,7 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
         setEditingProject(false);
       });
     } catch (issue) {
-      setError(
+      setProjectEditError(
         issue instanceof Error ? issue.message : "Could not update project",
       );
     } finally {
@@ -210,102 +208,51 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
                       onProjectSelect={navigateToProject}
                     />
 
-                    {editingProject ? (
-                      <form onSubmit={saveProject} className="mt-5 max-w-3xl overflow-hidden border border-white/10 bg-black">
-                        <div className="divide-y divide-white/10 px-5">
-                          <div className="grid gap-2 py-3.5 sm:grid-cols-[120px_minmax(0,1fr)] sm:items-center">
-                            <label htmlFor="project-name" className="text-xs text-zinc-500">Name</label>
-                            <FormInput
-                              id="project-name"
-                              value={projectForm.name}
-                              onChange={(event) => setProjectForm({ ...projectForm, name: event.target.value })}
-                              required
-                              variant="monochrome"
-                              className="!h-9 border-white/15 bg-white/[0.03] text-sm"
-                            />
-                          </div>
-                          <div className="grid gap-2 py-3.5 sm:grid-cols-[120px_minmax(0,1fr)] sm:items-center">
-                            <label htmlFor="project-description" className="text-xs text-zinc-500">Description</label>
-                            <FormInput
-                              id="project-description"
-                              value={projectForm.description}
-                              onChange={(event) => setProjectForm({ ...projectForm, description: event.target.value })}
-                              placeholder="Optional"
-                              variant="monochrome"
-                              className="!h-9 border-white/15 bg-white/[0.03] text-sm"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end gap-2 border-t border-white/10 px-5 py-4">
+                    <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <h1 className="truncate text-3xl tracking-[-0.04em] text-white sm:text-4xl">
+                            {currentProject?.name ?? projectSlug}
+                          </h1>
                           <button
                             type="button"
-                            className="inline-flex h-9 items-center justify-center gap-2 border border-white/15 px-3.5 text-sm text-zinc-300 transition hover:border-white/35 hover:bg-white/[0.05] disabled:opacity-50"
+                            className="grid h-9 w-9 shrink-0 place-items-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
                             onClick={() => {
-                              setProjectForm({
-                                name: currentProject?.name ?? "",
-                                description: currentProject?.description ?? ""
-                              });
-                              setEditingProject(false);
+                              setProjectEditError("");
+                              setEditingProject(true);
                             }}
-                            disabled={savingProject}
-                          >
-                            <AppIcon icon={Cancel01Icon} size={14} />
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            className="inline-flex h-9 items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-50"
-                            disabled={savingProject || !currentProject}
-                          >
-                            <AppIcon icon={CheckmarkCircle02Icon} size={14} />
-                            {savingProject ? "Saving…" : "Save"}
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="mt-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <h1 className="truncate text-3xl tracking-[-0.04em] text-white sm:text-4xl">
-                              {currentProject?.name ?? projectSlug}
-                            </h1>
-                            <button
-                              type="button"
-                              className="grid h-9 w-9 shrink-0 place-items-center border border-white/15 text-zinc-500 transition hover:border-white/35 hover:bg-white/[0.05] hover:text-white"
-                              onClick={() => setEditingProject(true)}
-                              aria-label="Edit project"
-                              disabled={!currentProject}
-                            >
-                              <AppIcon icon={PencilEdit02Icon} size={15} />
-                            </button>
-                          </div>
-                          <p className="mt-2 text-sm text-zinc-500">
-                            {currentProject?.description || `${currentProject?.serviceCount ?? 0} service${currentProject?.serviceCount === 1 ? "" : "s"}`}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="inline-flex h-10 items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-50"
-                            onClick={() => setCreateServiceOpen(true)}
+                            aria-label="Edit project"
                             disabled={!currentProject}
                           >
-                            <AppIcon icon={Add01Icon} size={15} />
-                            New service
-                          </button>
-                          <button
-                            type="button"
-                            className="grid h-10 w-10 place-items-center border border-white/15 text-zinc-500 transition hover:border-rose-400/60 hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-50"
-                            onClick={() => setDeleteProjectOpen(true)}
-                            aria-label="Delete project"
-                            disabled={!currentProject}
-                          >
-                            <AppIcon icon={Delete02Icon} size={15} />
+                            <AppIcon icon={PencilEdit02Icon} size={15} />
                           </button>
                         </div>
+                        <p className="mt-2 text-sm text-zinc-500">
+                          {currentProject?.description || `${currentProject?.serviceCount ?? 0} service${currentProject?.serviceCount === 1 ? "" : "s"}`}
+                        </p>
                       </div>
-                    )}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex h-10 items-center justify-center gap-2 bg-white px-4 text-sm text-black transition hover:bg-zinc-200 disabled:opacity-50"
+                          onClick={() => setCreateServiceOpen(true)}
+                          disabled={!currentProject}
+                        >
+                          <AppIcon icon={Add01Icon} size={15} />
+                          New service
+                        </button>
+                        <button
+                          type="button"
+                          className="grid h-10 w-10 place-items-center border border-white/15 text-zinc-500 transition hover:border-rose-400/60 hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-50"
+                          onClick={() => setDeleteProjectOpen(true)}
+                          aria-label="Delete project"
+                          disabled={!currentProject}
+                        >
+                          <AppIcon icon={Delete02Icon} size={15} />
+                        </button>
+                      </div>
+                    </div>
                   </header>
 
                   {error ? (
@@ -362,6 +309,25 @@ export function ProjectPage({ projectSlug }: { projectSlug: string }) {
         busy={deletingProject}
         onClose={() => setDeleteProjectOpen(false)}
         onConfirm={() => void deleteProject()}
+      />
+      <EditProjectModal
+        open={editingProject}
+        name={projectForm.name}
+        description={projectForm.description}
+        projectSlug={currentProject?.slug ?? projectSlug}
+        saving={savingProject}
+        error={projectEditError}
+        onNameChange={(name) => setProjectForm((current) => ({ ...current, name }))}
+        onDescriptionChange={(description) => setProjectForm((current) => ({ ...current, description }))}
+        onClose={() => {
+          setProjectForm({
+            name: currentProject?.name ?? "",
+            description: currentProject?.description ?? ""
+          });
+          setProjectEditError("");
+          setEditingProject(false);
+        }}
+        onSave={() => void saveProject()}
       />
     </>
   );
