@@ -156,6 +156,7 @@ export function writeComposeOverride(
   stack: ComposeStack,
   serviceId: string,
   sourceDir: string,
+  composeServices: string[],
 ) {
   const { composeFile, overrideFile } = composeArgs(
     stack,
@@ -164,15 +165,29 @@ export function writeComposeOverride(
   );
   if (!existsSync(composeFile))
     throw new Error(`Compose file not found: ${stack.compose}`);
-  const services: Record<string, { ports: string[] }> = {};
+  const routePorts = new Map<string, string[]>();
   for (const [key, route] of Object.entries(stack.routes)) {
     const hostPort = stack.hostPorts[key];
-    if (route.expose && hostPort)
-      services[route.service] = {
-        ports: [`127.0.0.1:${hostPort}:${route.port}`],
-      };
+    if (!composeServices.includes(route.service))
+      throw new Error(
+        `Route '${key}' references unknown Compose service '${route.service}'`,
+      );
+    if (route.expose && hostPort) {
+      const ports = routePorts.get(route.service) ?? [];
+      ports.push(`127.0.0.1:${hostPort}:${route.port}`);
+      routePorts.set(route.service, ports);
+    }
   }
-  writeFileSync(overrideFile, JSON.stringify({ services }, null, 2));
+  const lines = ["services:"];
+  for (const service of composeServices) {
+    lines.push(`  ${JSON.stringify(service)}:`);
+    lines.push("    ports: !override");
+    const ports = routePorts.get(service) ?? [];
+    if (ports.length === 0) lines.push("      []");
+    else
+      for (const port of ports) lines.push(`      - ${JSON.stringify(port)}`);
+  }
+  writeFileSync(overrideFile, `${lines.join("\n")}\n`);
   return { composeFile, overrideFile };
 }
 

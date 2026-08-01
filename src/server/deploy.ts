@@ -78,6 +78,7 @@ import { prepareTanStackStartRuntime } from "./tanstack-start-runtime.js";
 import {
   composeArgs,
   composeHostname,
+  composeProjectName,
   composeWorkspace,
   getComposeStack,
   readManifestFromWorkspace,
@@ -1039,7 +1040,31 @@ async function runComposeDeployment(deployment: Deployment, service: Service) {
       current.project,
       current.domain,
     );
-    writeComposeOverride(stack, service.id, sourceDir);
+    const baseConfig = await runBufferedCommand(
+      "docker",
+      [
+        "compose",
+        "-p",
+        composeProjectName(service.id),
+        "-f",
+        composeArgs(stack, service.id, sourceDir).composeFile,
+        "config",
+        "--format",
+        "json",
+      ],
+      { cwd: sourceDir, env: getEnvForService(service.id) },
+    );
+    if (baseConfig.code !== 0)
+      throw new Error(
+        baseConfig.stderr || "Could not inspect Compose services",
+      );
+    const configured = JSON.parse(baseConfig.stdout) as {
+      services?: Record<string, unknown>;
+    };
+    const composeServices = Object.keys(configured.services ?? {});
+    if (composeServices.length === 0)
+      throw new Error("Compose configuration contains no services");
+    writeComposeOverride(stack, service.id, sourceDir, composeServices);
     const { args } = composeArgs(stack, service.id, sourceDir);
     await runCommand("docker", [...args, "config", "--quiet"], deployment.id, {
       env: getEnvForService(service.id),
