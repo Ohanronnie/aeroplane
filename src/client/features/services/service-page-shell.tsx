@@ -209,9 +209,9 @@ export function ServicePageShell({
       startTransition(() => {
         setOverview(result);
         setActiveDeploymentId((current) => {
+          if (current && result.deployments.some((deployment) => deployment.id === current)) return current;
           const pendingDeployment = result.deployments.find((deployment) => deploymentIsPending(deployment.status));
           if (pendingDeployment) return pendingDeployment.id;
-          if (current && result.deployments.some((deployment) => deployment.id === current)) return current;
           return result.deployments[0]?.id ?? null;
         });
         if (shouldSyncSettings) setSettings(settingsFromService(result.service));
