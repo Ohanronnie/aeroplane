@@ -8,6 +8,7 @@ APP_DIR="$INSTALL_DIR/source"
 REPO_URL="${AEROPLANE_REPO_URL:-https://github.com/xt42io/aeroplane.git}"
 REPO_BRANCH="${AEROPLANE_REPO_BRANCH:-main}"
 PORT="${AEROPLANE_PORT:-4310}"
+MANAGE_CADDY="${AEROPLANE_MANAGE_CADDY:-true}"
 
 if [ "$(id -u)" -eq 0 ]; then
   SUDO=""
@@ -153,11 +154,15 @@ get_env_value() {
 write_env_file() {
   env_file="$INSTALL_DIR/.env"
   secret_key="$(get_env_value "$env_file" AEROPLANE_SECRET_KEY)"
+  local_cli_token="$(get_env_value "$env_file" AEROPLANE_LOCAL_CLI_TOKEN)"
   public_url="$(get_env_value "$env_file" PUBLIC_URL)"
   control_plane_hostname="$(get_env_value "$env_file" CONTROL_PLANE_HOSTNAME)"
 
   if [ -z "$secret_key" ]; then
     secret_key="$(random_secret)"
+  fi
+  if [ -z "$local_cli_token" ]; then
+    local_cli_token="$(random_secret)"
   fi
   if [ -z "$public_url" ]; then
     public_url="$(detect_public_url)"
@@ -165,7 +170,7 @@ write_env_file() {
 
   tmp_file="$(mktemp)"
   if [ -f "$env_file" ]; then
-    grep -v -E '^(AEROPLANE_INSTALL_MODE|AEROPLANE_INSTALL_DIR|AEROPLANE_ENV_PATH|AEROPLANE_REPO_URL|AEROPLANE_REPO_BRANCH|AEROPLANE_IMAGE|AEROPLANE_IMAGE_UPDATE_CMD|AEROPLANE_UPDATE_REPO_URL|AEROPLANE_UPDATE_BRANCH|AEROPLANE_UPDATE_RESTART_CMD|AEROPLANE_SECRET_KEY|DATA_DIR|DEPLOY_DRY_RUN|CADDY_CONFIG_PATH|CADDY_DATA_DIR|CADDY_RELOAD_CMD|PORT|HOST|PUBLIC_URL|CONTROL_PLANE_HOSTNAME|BUILDKIT_HOST|AEROPLANE_RUNTIME_NETWORK)=' "$env_file" > "$tmp_file" || true
+    grep -v -E '^(AEROPLANE_INSTALL_MODE|AEROPLANE_INSTALL_DIR|AEROPLANE_ENV_PATH|AEROPLANE_REPO_URL|AEROPLANE_REPO_BRANCH|AEROPLANE_IMAGE|AEROPLANE_IMAGE_UPDATE_CMD|AEROPLANE_UPDATE_REPO_URL|AEROPLANE_UPDATE_BRANCH|AEROPLANE_UPDATE_RESTART_CMD|AEROPLANE_SECRET_KEY|AEROPLANE_LOCAL_CLI_TOKEN|AEROPLANE_MANAGE_CADDY|DATA_DIR|DEPLOY_DRY_RUN|CADDY_CONFIG_PATH|CADDY_DATA_DIR|CADDY_RELOAD_CMD|PORT|HOST|PUBLIC_URL|CONTROL_PLANE_HOSTNAME|BUILDKIT_HOST|AEROPLANE_RUNTIME_NETWORK)=' "$env_file" > "$tmp_file" || true
   else
     : > "$tmp_file"
   fi
@@ -180,11 +185,13 @@ AEROPLANE_UPDATE_REPO_URL=$REPO_URL
 AEROPLANE_UPDATE_BRANCH=$REPO_BRANCH
 AEROPLANE_UPDATE_RESTART_CMD="systemctl restart aeroplane"
 AEROPLANE_SECRET_KEY=$secret_key
+AEROPLANE_LOCAL_CLI_TOKEN=$local_cli_token
+AEROPLANE_MANAGE_CADDY=$MANAGE_CADDY
 DATA_DIR=$INSTALL_DIR/data
 DEPLOY_DRY_RUN=false
-CADDY_CONFIG_PATH=$INSTALL_DIR/data/Caddyfile
-CADDY_DATA_DIR=/data
-CADDY_RELOAD_CMD=true
+CADDY_CONFIG_PATH=${AEROPLANE_CADDY_CONFIG_PATH:-$INSTALL_DIR/data/Caddyfile}
+CADDY_DATA_DIR=${AEROPLANE_CADDY_DATA_DIR:-/data}
+CADDY_RELOAD_CMD="${AEROPLANE_CADDY_RELOAD_CMD:-true}"
 PORT=$PORT
 HOST=0.0.0.0
 PUBLIC_URL=$public_url
@@ -236,6 +243,7 @@ build_aeroplane() {
   say "Building Aeroplane..."
   npm run build
   npm prune --omit=dev --package-lock=false
+  $SUDO ln -sfn "$APP_DIR/dist/cli/index.js" /usr/local/bin/aeroplane
 }
 
 write_compose_file() {
@@ -294,8 +302,13 @@ EOF
 
 start_runtime_services() {
   cd "$INSTALL_DIR"
-  say "Starting BuildKit and Caddy..."
-  $SUDO docker compose up -d buildkit caddy
+  if [ "$MANAGE_CADDY" = "true" ]; then
+    say "Starting BuildKit and Caddy..."
+    $SUDO docker compose up -d buildkit caddy
+  else
+    say "Starting BuildKit (using the configured external Caddy)..."
+    $SUDO docker compose up -d buildkit
+  fi
 }
 
 start_aeroplane() {

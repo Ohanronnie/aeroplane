@@ -137,6 +137,38 @@ curl "$AEROPLANE_URL/api/projects" \
 
 API keys use the same `/api/*` endpoints as the dashboard. Sensitive system settings and key management remain browser-session only.
 
+## CLI
+
+The installer adds the `aeroplane` command to `/usr/local/bin`. On the Aeroplane host it automatically connects to `http://127.0.0.1:4310` and reads the root-only local credential generated during installation.
+
+Create or update a service and deploy it:
+
+```bash
+aeroplane run acme/api expose 3000
+```
+
+GitHub URLs and direct Git URLs are also accepted:
+
+```bash
+aeroplane run https://github.com/acme/api --expose 3000 --branch main
+```
+
+Useful follow-up commands:
+
+```bash
+aeroplane status
+aeroplane deploy api
+aeroplane logs api
+```
+
+For remote administration, create a read/write API key in the dashboard and save the connection once:
+
+```bash
+aeroplane connect https://pilot.example.com --api-key ap_...
+```
+
+Use `AEROPLANE_URL` and `AEROPLANE_API_KEY` in CI instead of saving credentials.
+
 ## Domains
 
 Set a dashboard domain in onboarding or system settings to serve Aeroplane itself through Caddy:

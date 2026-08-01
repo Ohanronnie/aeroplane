@@ -1,13 +1,23 @@
 import type { Context, Next } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { eq, isNull } from "drizzle-orm";
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from "node:crypto";
 import { nanoid } from "nanoid";
 import { config } from "./config.js";
 import { db, nowIso } from "./db.js";
 import { authSessions, projectGroups, users, type User } from "./schema.js";
 import { configuredControlPlaneHostname } from "./system-settings.js";
-import { apiKeyTokenFromRequest, authenticateApiKeyToken, type AuthenticatedApiKey } from "./api-keys.js";
+import {
+  apiKeyTokenFromRequest,
+  authenticateApiKeyToken,
+  authenticateLocalCliToken,
+  type AuthenticatedApiKey,
+} from "./api-keys.js";
 
 const sessionCookie = "aeroplane_session";
 const sessionDays = 30;
@@ -31,7 +41,7 @@ export function publicUser(user: User): PublicUser {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role
+    role: user.role,
   };
 }
 
@@ -49,7 +59,7 @@ function cookieOptions() {
     httpOnly: true,
     sameSite: "Lax" as const,
     secure: currentPublicUrl().startsWith("https://"),
-    maxAge: sessionMaxAgeSeconds
+    maxAge: sessionMaxAgeSeconds,
   };
 }
 
@@ -69,8 +79,11 @@ function passwordHash(password: string) {
 
 function verifyPassword(password: string, storedHash: string) {
   const [scheme, version, salt, expectedHash] = storedHash.split(":");
-  if (scheme !== "scrypt" || version !== "v1" || !salt || !expectedHash) return false;
-  const actual = Buffer.from(scryptSync(password, salt, 64).toString("base64url"));
+  if (scheme !== "scrypt" || version !== "v1" || !salt || !expectedHash)
+    return false;
+  const actual = Buffer.from(
+    scryptSync(password, salt, 64).toString("base64url"),
+  );
   const expected = Buffer.from(expectedHash);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
@@ -84,7 +97,11 @@ function sessionExpiry() {
 }
 
 function requestIp(c: Context) {
-  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("x-real-ip") ?? "";
+  return (
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    c.req.header("x-real-ip") ??
+    ""
+  );
 }
 
 export function hasAuthUsers() {
@@ -97,7 +114,11 @@ export function getCurrentUser(c: Context) {
   if (!token) return null;
 
   const tokenHash = sessionTokenHash(token);
-  const session = db.select().from(authSessions).where(eq(authSessions.tokenHash, tokenHash)).get();
+  const session = db
+    .select()
+    .from(authSessions)
+    .where(eq(authSessions.tokenHash, tokenHash))
+    .get();
   if (!session) return null;
 
   if (Date.parse(session.expiresAt) <= Date.now()) {
@@ -106,7 +127,11 @@ export function getCurrentUser(c: Context) {
     return null;
   }
 
-  const user = db.select().from(users).where(eq(users.id, session.userId)).get();
+  const user = db
+    .select()
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .get();
   if (!user) {
     db.delete(authSessions).where(eq(authSessions.id, session.id)).run();
     deleteCookie(c, sessionCookie, { path: "/" });
@@ -114,7 +139,10 @@ export function getCurrentUser(c: Context) {
   }
 
   const timestamp = nowIso();
-  db.update(authSessions).set({ lastSeenAt: timestamp }).where(eq(authSessions.id, session.id)).run();
+  db.update(authSessions)
+    .set({ lastSeenAt: timestamp })
+    .where(eq(authSessions.id, session.id))
+    .run();
   return publicUser(user);
 }
 
@@ -130,7 +158,7 @@ export function createSession(c: Context, user: User | PublicUser) {
       ipAddress: requestIp(c) || null,
       createdAt: timestamp,
       lastSeenAt: timestamp,
-      expiresAt: sessionExpiry()
+      expiresAt: sessionExpiry(),
     })
     .run();
 
@@ -140,18 +168,30 @@ export function createSession(c: Context, user: User | PublicUser) {
 export function clearSession(c: Context) {
   const token = getCookie(c, sessionCookie);
   if (token) {
-    db.delete(authSessions).where(eq(authSessions.tokenHash, sessionTokenHash(token))).run();
+    db.delete(authSessions)
+      .where(eq(authSessions.tokenHash, sessionTokenHash(token)))
+      .run();
   }
   deleteCookie(c, sessionCookie, { path: "/" });
 }
 
-export function createOwner(input: { name: string; email: string; password: string }) {
+export function createOwner(input: {
+  name: string;
+  email: string;
+  password: string;
+}) {
   const user = createUser({ ...input, role: "owner", lastLoginAt: nowIso() });
   assignUnownedProjectsToUser(user.id);
   return user;
 }
 
-export function createUser(input: { name: string; email: string; password: string; role?: "owner" | "user"; lastLoginAt?: string | null }) {
+export function createUser(input: {
+  name: string;
+  email: string;
+  password: string;
+  role?: "owner" | "user";
+  lastLoginAt?: string | null;
+}) {
   const timestamp = nowIso();
   const user: User = {
     id: nanoid(10),
@@ -161,7 +201,7 @@ export function createUser(input: { name: string; email: string; password: strin
     role: input.role ?? "user",
     createdAt: timestamp,
     updatedAt: timestamp,
-    lastLoginAt: input.lastLoginAt ?? null
+    lastLoginAt: input.lastLoginAt ?? null,
   };
   db.insert(users).values(user).run();
   return user;
@@ -175,20 +215,28 @@ function assignUnownedProjectsToUser(userId: string) {
 }
 
 export function authenticateUser(email: string, password: string) {
-  const user = db.select().from(users).where(eq(users.email, email.toLowerCase())).get();
+  const user = db
+    .select()
+    .from(users)
+    .where(eq(users.email, email.toLowerCase()))
+    .get();
   if (!user || !verifyPassword(password, user.passwordHash)) return null;
   const timestamp = nowIso();
-  db.update(users).set({ lastLoginAt: timestamp, updatedAt: timestamp }).where(eq(users.id, user.id)).run();
+  db.update(users)
+    .set({ lastLoginAt: timestamp, updatedAt: timestamp })
+    .where(eq(users.id, user.id))
+    .run();
   return {
     ...user,
     lastLoginAt: timestamp,
-    updatedAt: timestamp
+    updatedAt: timestamp,
   };
 }
 
 function trustedOrigin(c: Context) {
   const method = c.req.method.toUpperCase();
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return true;
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS")
+    return true;
 
   const origin = c.req.header("origin");
   if (!origin) return true;
@@ -197,8 +245,11 @@ function trustedOrigin(c: Context) {
   const requestUrl = new URL(c.req.url);
   allowedOrigins.add(requestUrl.origin);
 
-  const forwardedHost = c.req.header("x-forwarded-host") ?? c.req.header("host");
-  const forwardedProto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim() || requestUrl.protocol.replace(":", "");
+  const forwardedHost =
+    c.req.header("x-forwarded-host") ?? c.req.header("host");
+  const forwardedProto =
+    c.req.header("x-forwarded-proto")?.split(",")[0]?.trim() ||
+    requestUrl.protocol.replace(":", "");
   if (forwardedHost) {
     allowedOrigins.add(`${forwardedProto}://${forwardedHost}`);
   }
@@ -220,7 +271,11 @@ function trustedOrigin(c: Context) {
   try {
     const originUrl = new URL(origin);
     const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-    if (localHosts.has(originUrl.hostname) && localHosts.has(requestUrl.hostname)) return true;
+    if (
+      localHosts.has(originUrl.hostname) &&
+      localHosts.has(requestUrl.hostname)
+    )
+      return true;
   } catch {
     return false;
   }
@@ -252,7 +307,9 @@ export async function requireAuth(c: Context, next: Next) {
 
   const apiKeyToken = apiKeyTokenFromRequest(c);
   if (apiKeyToken) {
-    const apiKey = authenticateApiKeyToken(apiKeyToken);
+    const apiKey =
+      authenticateApiKeyToken(apiKeyToken) ??
+      authenticateLocalCliToken(apiKeyToken);
     if (!apiKey) {
       return c.json({ error: "Invalid or expired API key" }, 401);
     }
