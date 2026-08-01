@@ -15,8 +15,8 @@ const deploymentFailureExplanationSchema = z.object({
   cause: z.string().min(1),
   suggestedFix: z.string().min(1),
   confidence: z.enum(["low", "medium", "high"]),
-  commands: z.array(z.string()).max(5).default([]),
-  relatedLogLines: z.array(z.string()).max(8).default([])
+  commands: z.array(z.string()).max(5),
+  relatedLogLines: z.array(z.string()).max(8)
 });
 
 export type DeploymentFailureExplanation = z.infer<typeof deploymentFailureExplanationSchema> & {
