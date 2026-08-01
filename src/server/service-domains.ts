@@ -6,16 +6,23 @@ import { domains, services, type Service } from "./schema.js";
 import { normalizeRootDomain } from "./root-domain.js";
 import { getSystemSettings } from "./system-settings.js";
 import { isWorkerService } from "../shared/service-runtime.js";
+import { getComposeStack } from "./compose-stack.js";
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function generatedHostnamePattern(serviceSlug: string, rootDomain: string) {
-  return new RegExp(`^${escapeRegex(serviceSlug)}(?:-\\d+)?\\.${escapeRegex(rootDomain)}$`);
+  return new RegExp(
+    `^${escapeRegex(serviceSlug)}(?:-\\d+)?\\.${escapeRegex(rootDomain)}$`,
+  );
 }
 
-export function isGeneratedServiceHostname(serviceSlug: string, hostname: string, rootDomainInput = getSystemSettings().rootDomain) {
+export function isGeneratedServiceHostname(
+  serviceSlug: string,
+  hostname: string,
+  rootDomainInput = getSystemSettings().rootDomain,
+) {
   const rootDomain = normalizeRootDomain(rootDomainInput);
   if (!rootDomain) return false;
 
@@ -23,7 +30,13 @@ export function isGeneratedServiceHostname(serviceSlug: string, hostname: string
 }
 
 function hostnameExists(hostname: string) {
-  return Boolean(db.select({ id: domains.id }).from(domains).where(eq(domains.hostname, hostname)).get());
+  return Boolean(
+    db
+      .select({ id: domains.id })
+      .from(domains)
+      .where(eq(domains.hostname, hostname))
+      .get(),
+  );
 }
 
 function uniqueGeneratedHostname(serviceSlug: string, rootDomain: string) {
@@ -38,12 +51,27 @@ function uniqueGeneratedHostname(serviceSlug: string, rootDomain: string) {
   return hostname;
 }
 
-export function ensureDefaultDomainForService(service: Service, rootDomainInput = getSystemSettings().rootDomain) {
+export function ensureDefaultDomainForService(
+  service: Service,
+  rootDomainInput = getSystemSettings().rootDomain,
+) {
   const rootDomain = normalizeRootDomain(rootDomainInput);
-  if (!rootDomain || isDatabaseService(service) || isWorkerService(service)) return null;
+  if (
+    !rootDomain ||
+    isDatabaseService(service) ||
+    isWorkerService(service) ||
+    getComposeStack(service.id)
+  )
+    return null;
 
-  const existingServiceDomains = db.select().from(domains).where(eq(domains.serviceId, service.id)).all();
-  const existingGeneratedDomain = existingServiceDomains.find((domain) => isGeneratedServiceHostname(service.slug, domain.hostname, rootDomain));
+  const existingServiceDomains = db
+    .select()
+    .from(domains)
+    .where(eq(domains.serviceId, service.id))
+    .all();
+  const existingGeneratedDomain = existingServiceDomains.find((domain) =>
+    isGeneratedServiceHostname(service.slug, domain.hostname, rootDomain),
+  );
   if (existingGeneratedDomain) return existingGeneratedDomain;
 
   const timestamp = nowIso();
@@ -53,22 +81,32 @@ export function ensureDefaultDomainForService(service: Service, rootDomainInput 
     hostname: uniqueGeneratedHostname(service.slug, rootDomain),
     status: "pending",
     createdAt: timestamp,
-    updatedAt: timestamp
+    updatedAt: timestamp,
   };
 
   db.insert(domains).values(domain).run();
   return domain;
 }
 
-export function ensureDefaultDomainsForExistingServices(rootDomainInput = getSystemSettings().rootDomain) {
+export function ensureDefaultDomainsForExistingServices(
+  rootDomainInput = getSystemSettings().rootDomain,
+) {
   const rootDomain = normalizeRootDomain(rootDomainInput);
   if (!rootDomain) return [];
 
   const created = [];
   for (const service of db.select().from(services).all()) {
-    const beforeCount = db.select().from(domains).where(eq(domains.serviceId, service.id)).all().length;
+    const beforeCount = db
+      .select()
+      .from(domains)
+      .where(eq(domains.serviceId, service.id))
+      .all().length;
     const domain = ensureDefaultDomainForService(service, rootDomain);
-    const afterCount = db.select().from(domains).where(eq(domains.serviceId, service.id)).all().length;
+    const afterCount = db
+      .select()
+      .from(domains)
+      .where(eq(domains.serviceId, service.id))
+      .all().length;
     if (domain && afterCount > beforeCount) {
       created.push(domain);
     }

@@ -24,6 +24,7 @@ import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 import { config } from "./config.js";
 import { getComposeStack, saveComposeStack } from "./compose-stack.js";
+import { composeHostname, composeRoutesForService } from "./compose-stack.js";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
 import {
   abortDeployment,
@@ -1020,6 +1021,8 @@ async function publicService(
   const isDockerImage = isDockerImageService(normalizedService);
   const isFunction = isFunctionService(normalizedService);
   const isWorker = isWorkerService(normalizedService);
+  const composeStack = getComposeStack(service.id);
+  const composeRoutes = composeRoutesForService(service);
   const isStaticSite =
     !isDatabase && !isWorker && Boolean(normalizedService.staticOutput?.trim());
   service = normalizedService;
@@ -1037,11 +1040,15 @@ async function publicService(
     : null;
   const shouldProbe = liveChecks && service.status === "active";
   const reachable = shouldProbe
-    ? isWorker
-      ? await checkContainerRunning(containerNameForService(service.id))
-      : isStaticSite
-        ? checkStaticSiteReady(service.id)
-        : await checkPortReachable(appPort)
+    ? composeStack
+      ? await Promise.all(
+          composeRoutes.map((route) => checkPortReachable(route.hostPort)),
+        ).then((results) => results.every(Boolean))
+      : isWorker
+        ? await checkContainerRunning(containerNameForService(service.id))
+        : isStaticSite
+          ? checkStaticSiteReady(service.id)
+          : await checkPortReachable(appPort)
     : false;
   const latestDeploymentIsActive =
     latestDeployment?.status === "queued" ||
@@ -1073,9 +1080,11 @@ async function publicService(
   const primaryUrl =
     isDatabase || isWorker
       ? ""
-      : preferredDomain
-        ? urlForHostname(preferredDomain.hostname)
-        : localUrl;
+      : composeStack
+        ? urlForHostname(composeHostname(composeStack, "root"))
+        : preferredDomain
+          ? urlForHostname(preferredDomain.hostname)
+          : localUrl;
   const preferredDomainPayload = preferredDomain
     ? { hostname: preferredDomain.hostname, status: preferredDomain.status }
     : null;
