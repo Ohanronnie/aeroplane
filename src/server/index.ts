@@ -23,6 +23,7 @@ import { Readable } from "node:stream";
 import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 import { config } from "./config.js";
+import { getComposeStack, saveComposeStack } from "./compose-stack.js";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
 import {
   abortDeployment,
@@ -632,6 +633,7 @@ const createServiceSchema = serviceSettingsSchema
   .extend({
     name: z.string().trim().min(1),
     env: z.array(envSchema).optional().default([]),
+    composeManifest: z.unknown().optional(),
   })
   .superRefine((value, ctx) => {
     const isFunction =
@@ -708,6 +710,7 @@ const updateServiceSchema = z.object({
   runtimeMode: z.enum(serviceRuntimeModes).optional(),
   internalPort: z.coerce.number().int().min(1).max(65535).optional(),
   databasePublicEnabled: z.boolean().optional(),
+  composeManifest: z.unknown().optional(),
   databasePublicHostname: publicHostnameSchema,
   postgresLogicalReplicationEnabled: z.boolean().optional(),
 });
@@ -1268,6 +1271,15 @@ function createServiceRecord(
 
   db.insert(services).values(service).run();
 
+  if (input.composeManifest !== undefined) {
+    saveComposeStack(
+      service.id,
+      input.composeManifest,
+      serviceSlug,
+      normalizeRootDomain(getSystemSettings().rootDomain),
+    );
+  }
+
   if (isFunction) {
     createServiceFunction(service.id, inputFunctionRuntime, input.sourceCode);
   }
@@ -1275,7 +1287,7 @@ function createServiceRecord(
   if (isDatabase) {
     initializeDatabaseBackupSettings(service.id);
   }
-  ensureDefaultDomainForService(service);
+  if (!getComposeStack(service.id)) ensureDefaultDomainForService(service);
   if (input.env.length > 0) {
     const timestamp = nowIso();
     const uniqueEnv = new Map<string, string>();
@@ -3794,7 +3806,7 @@ app.patch("/api/services/:serviceId", async (c) => {
     return jsonError(body.error.issues[0]?.message ?? "Invalid update");
   }
 
-  const { dockerImage, ...updateData } = body.data;
+  const { dockerImage, composeManifest, ...updateData } = body.data;
   let repoFullName =
     updateData.repoFullName === undefined
       ? service.repoFullName
@@ -3860,10 +3872,24 @@ app.patch("/api/services/:serviceId", async (c) => {
     .where(eq(services.id, service.id))
     .run();
 
+  if (composeManifest !== undefined) {
+    saveComposeStack(
+      service.id,
+      composeManifest,
+      service.slug,
+      normalizeRootDomain(getSystemSettings().rootDomain),
+    );
+  }
+
   syncDatabaseUrlEnvVar(service.id);
 
   const updated = getServiceById(service.id);
-  if (updated && !isDatabaseService(updated) && !isWorkerService(updated)) {
+  if (
+    updated &&
+    !isDatabaseService(updated) &&
+    !isWorkerService(updated) &&
+    !getComposeStack(updated.id)
+  ) {
     ensureDefaultDomainForService(updated);
   }
   if (

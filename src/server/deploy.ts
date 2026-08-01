@@ -1,20 +1,40 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { randomInt } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { ChildProcess, spawn } from "node:child_process";
 import net from "node:net";
 import { config } from "./config.js";
 import { db, nowIso, sqlite } from "./db.js";
 import { publishDeploymentLog } from "./logBus.js";
-import { deploymentLogs, deployments, domains, envVars, projectGroups, services, users, type Deployment, type Service } from "./schema.js";
+import {
+  deploymentLogs,
+  deployments,
+  domains,
+  envVars,
+  projectGroups,
+  services,
+  users,
+  type Deployment,
+  type Service,
+} from "./schema.js";
 import { writeAndReloadCaddy } from "./caddy.js";
 import { getCloneTokenForRepo } from "./github-connect.js";
 import { resolveServiceEnv } from "./variable-resolver.js";
 import { databaseTypeForService, isDatabaseService } from "./database-urls.js";
 import { isPostgresFamilyDatabase } from "./database-engine.js";
-import { databaseContainerCommandArgs, databaseDataVolumeArg } from "./database-runtime.js";
+import {
+  databaseContainerCommandArgs,
+  databaseDataVolumeArg,
+} from "./database-runtime.js";
 import { databaseImageForService } from "./database-source-image.js";
 import { ensureStableDatabaseDataVolume } from "./database-volume-adoption.js";
 import { ensureDefaultDomainForService } from "./service-domains.js";
@@ -24,22 +44,46 @@ import {
   postgresTlsServerArgs,
   postgresTlsVolumeCreateDockerArgs,
   postgresTlsVolumePrepareDockerPlan,
-  postgresTlsVolumeArg
+  postgresTlsVolumeArg,
 } from "./postgres-tls.js";
-import { ensureProjectRuntimeNetwork, runtimeNetworkArgs } from "./runtime-network.js";
-import { railpackBuildEnv, railpackBuildEnvArgs } from "./railpack-build-env.js";
-import { saveRedisDatasetIfRunning, stopRedisContainerForReplacement } from "./redis-persistence.js";
+import {
+  ensureProjectRuntimeNetwork,
+  runtimeNetworkArgs,
+} from "./runtime-network.js";
+import {
+  railpackBuildEnv,
+  railpackBuildEnvArgs,
+} from "./railpack-build-env.js";
+import {
+  saveRedisDatasetIfRunning,
+  stopRedisContainerForReplacement,
+} from "./redis-persistence.js";
 import { deploymentConcurrency } from "./system-settings.js";
 import { buildkitStartHint, ensureBuildkitRunning } from "./buildkit.js";
 import { detectDockerfileBuild, dockerBuildArgs } from "./dockerfile-build.js";
 import { writeRailpackPrebuildConfig } from "./railpack-prebuild-config.js";
 import { removeDeploymentContainer } from "./deployment-container-cleanup.js";
-import { dockerImageForService, isDockerImageService } from "../shared/service-source.js";
+import {
+  dockerImageForService,
+  isDockerImageService,
+} from "../shared/service-source.js";
 import { ensurePostgresLogicalReplication } from "./postgres-logical-replication.js";
 import { isWorkerService } from "../shared/service-runtime.js";
 import { isFunctionService } from "../shared/service-functions.js";
-import { functionRuntimeLabel, writeFunctionDeploymentProject } from "./service-functions.js";
+import {
+  functionRuntimeLabel,
+  writeFunctionDeploymentProject,
+} from "./service-functions.js";
 import { prepareTanStackStartRuntime } from "./tanstack-start-runtime.js";
+import {
+  composeArgs,
+  composeHostname,
+  composeWorkspace,
+  getComposeStack,
+  readManifestFromWorkspace,
+  saveComposeStack,
+  writeComposeOverride,
+} from "./compose-stack.js";
 
 type RunOptions = {
   cwd?: string;
@@ -79,17 +123,28 @@ function now() {
 // `___`, `..`) to a single `-`, leaving already-valid separators untouched.
 function normalizeDockerSeparators(value: string) {
   return value.replace(/[._-]+/g, (sep) => {
-    if (/^-+$/.test(sep) || sep === "_" || sep === "__" || sep === ".") return sep;
+    if (/^-+$/.test(sep) || sep === "_" || sep === "__" || sep === ".")
+      return sep;
     return "-";
   });
 }
 
 function safeSlug(value: string) {
-  return normalizeDockerSeparators(value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "").slice(0, 48) || "app";
+  return (
+    normalizeDockerSeparators(
+      value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-"),
+    )
+      .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "")
+      .slice(0, 48) || "app"
+  );
 }
 
 function safeDockerIdentifier(value: string, fallback: string) {
-  return normalizeDockerSeparators(value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "") || fallback;
+  return (
+    normalizeDockerSeparators(
+      value.toLowerCase().replace(/[^a-z0-9_.-]+/g, "-"),
+    ).replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "") || fallback
+  );
 }
 
 export function containerNameForService(serviceId: string) {
@@ -110,7 +165,12 @@ function redactLine(line: string, secrets: string[]) {
   return redacted;
 }
 
-function appendDeploymentLog(deploymentId: string, line: string, stream = "system", secrets: string[] = []) {
+function appendDeploymentLog(
+  deploymentId: string,
+  line: string,
+  stream = "system",
+  secrets: string[] = [],
+) {
   const cleanLine = redactLine(line, secrets);
   const createdAt = now();
   const result = db
@@ -122,21 +182,29 @@ function appendDeploymentLog(deploymentId: string, line: string, stream = "syste
     deploymentId,
     line: cleanLine,
     stream,
-    createdAt
+    createdAt,
   };
   publishDeploymentLog(log);
   return log;
 }
 
-function runCommand(command: string, args: string[], deploymentId: string, options: RunOptions = {}) {
+function runCommand(
+  command: string,
+  args: string[],
+  deploymentId: string,
+  options: RunOptions = {},
+) {
   const redactions = options.redact ?? [];
-  appendDeploymentLog(deploymentId, `$ ${[command, ...args].map((part) => redactLine(part, redactions)).join(" ")}`);
+  appendDeploymentLog(
+    deploymentId,
+    `$ ${[command, ...args].map((part) => redactLine(part, redactions)).join(" ")}`,
+  );
 
   return new Promise<void>((resolvePromise, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
     activeCommands.set(deploymentId, child);
     let stdout = "";
@@ -176,18 +244,29 @@ function runCommand(command: string, args: string[], deploymentId: string, optio
       if (code === 0) {
         resolvePromise();
       } else {
-        reject(new Error(redactLine((stderr || stdout || `${command} exited with ${code}`).trim(), redactions)));
+        reject(
+          new Error(
+            redactLine(
+              (stderr || stdout || `${command} exited with ${code}`).trim(),
+              redactions,
+            ),
+          ),
+        );
       }
     });
   });
 }
 
-function runBufferedCommand(command: string, args: string[], options: RunOptions = {}): Promise<BufferedCommandResult> {
+function runBufferedCommand(
+  command: string,
+  args: string[],
+  options: RunOptions = {},
+): Promise<BufferedCommandResult> {
   return new Promise((resolvePromise) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
@@ -242,9 +321,17 @@ async function ensureBuildkitAvailable(deploymentId: string) {
     return;
   }
 
-  appendDeploymentLog(deploymentId, `BuildKit is unavailable at ${config.buildkitHost}.`, "stderr");
+  appendDeploymentLog(
+    deploymentId,
+    `BuildKit is unavailable at ${config.buildkitHost}.`,
+    "stderr",
+  );
   appendDeploymentLog(deploymentId, recovery.detail, "stderr");
-  appendDeploymentLog(deploymentId, `Start it with: ${buildkitStartHint()}`, "stderr");
+  appendDeploymentLog(
+    deploymentId,
+    `Start it with: ${buildkitStartHint()}`,
+    "stderr",
+  );
   throw new Error(`BuildKit is unavailable at ${config.buildkitHost}`);
 }
 
@@ -253,7 +340,11 @@ function dockerUnavailableMessage(detail: string) {
     return "Docker is configured to use OrbStack, but the OrbStack Docker socket is unavailable. Start OrbStack, then retry the deployment.";
   }
 
-  if (/docker daemon|docker api|Cannot connect|connect: no such file|connection refused/i.test(detail)) {
+  if (
+    /docker daemon|docker api|Cannot connect|connect: no such file|connection refused/i.test(
+      detail,
+    )
+  ) {
     return "Docker is unavailable. Start Docker or switch to a working Docker context, then retry the deployment.";
   }
 
@@ -261,13 +352,22 @@ function dockerUnavailableMessage(detail: string) {
 }
 
 async function ensureDockerAvailable(deploymentId: string) {
-  const result = await runBufferedCommand("docker", ["version", "--format", "client {{.Client.Version}} / server {{.Server.Version}}"]);
+  const result = await runBufferedCommand("docker", [
+    "version",
+    "--format",
+    "client {{.Client.Version}} / server {{.Server.Version}}",
+  ]);
   if (result.code === 0) return;
 
-  const detail = (result.stderr || result.stdout || `docker version exited with ${result.code}`).trim();
+  const detail = (
+    result.stderr ||
+    result.stdout ||
+    `docker version exited with ${result.code}`
+  ).trim();
   const message = dockerUnavailableMessage(detail);
   appendDeploymentLog(deploymentId, message, "stderr");
-  if (detail && detail !== message) appendDeploymentLog(deploymentId, detail, "stderr");
+  if (detail && detail !== message)
+    appendDeploymentLog(deploymentId, detail, "stderr");
   throw new Error(message);
 }
 
@@ -310,7 +410,9 @@ function probePortOnce(port: number): Promise<void> {
     };
 
     socket.once("connect", () => {
-      socket.write("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+      socket.write(
+        "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+      );
     });
 
     socket.on("data", () => {
@@ -344,7 +446,9 @@ async function probePort(port: number, timeoutMs = 20000): Promise<void> {
     }
   }
 
-  throw new Error(`TCP/HTTP health probe timed out on port ${port} after ${timeoutMs}ms`);
+  throw new Error(
+    `TCP/HTTP health probe timed out on port ${port} after ${timeoutMs}ms`,
+  );
 }
 
 async function getContainerState(containerName: string) {
@@ -352,25 +456,40 @@ async function getContainerState(containerName: string) {
     "inspect",
     "--format",
     "{{.State.Running}}|{{.State.Restarting}}|{{.State.Status}}|{{.State.ExitCode}}|{{.State.Error}}",
-    containerName
+    containerName,
   ]);
   if (result.code !== 0) return null;
 
-  const [running = "", restarting = "", status = "unknown", exitCode = "", error = ""] = result.stdout.trim().split("|");
+  const [
+    running = "",
+    restarting = "",
+    status = "unknown",
+    exitCode = "",
+    error = "",
+  ] = result.stdout.trim().split("|");
   return {
     running: running === "true",
     restarting: restarting === "true",
     status,
     exitCode: Number(exitCode),
-    error
+    error,
   };
 }
 
-function deploymentLogCommand(command: string, args: string[], secrets: string[]) {
+function deploymentLogCommand(
+  command: string,
+  args: string[],
+  secrets: string[],
+) {
   return `$ ${[command, ...args].map((part) => redactLine(part, secrets)).join(" ")}`;
 }
 
-function appendCommandOutputLogs(deploymentId: string, output: string, stream: "stdout" | "stderr", secrets: string[]) {
+function appendCommandOutputLogs(
+  deploymentId: string,
+  output: string,
+  stream: "stdout" | "stderr",
+  secrets: string[],
+) {
   for (const line of output.split(/\r?\n/)) {
     if (line.trim().length > 0) {
       appendDeploymentLog(deploymentId, line, stream, secrets);
@@ -378,8 +497,15 @@ function appendCommandOutputLogs(deploymentId: string, output: string, stream: "
   }
 }
 
-function currentActivePortForService(serviceId: string, fallback: number | null) {
-  const current = db.select({ activePort: services.activePort }).from(services).where(eq(services.id, serviceId)).get();
+function currentActivePortForService(
+  serviceId: string,
+  fallback: number | null,
+) {
+  const current = db
+    .select({ activePort: services.activePort })
+    .from(services)
+    .where(eq(services.id, serviceId))
+    .get();
   return current ? current.activePort : fallback;
 }
 
@@ -390,7 +516,7 @@ async function rollbackFailedWebRollout({
   shouldRestoreActivePort,
   tempContainerName,
   shouldRemoveTempContainer,
-  secrets
+  secrets,
 }: {
   deploymentId: string;
   serviceId: string;
@@ -402,61 +528,105 @@ async function rollbackFailedWebRollout({
 }) {
   if (shouldRestoreActivePort) {
     try {
-      db.update(services).set({ activePort: previousActivePort, updatedAt: now() }).where(eq(services.id, serviceId)).run();
+      db.update(services)
+        .set({ activePort: previousActivePort, updatedAt: now() })
+        .where(eq(services.id, serviceId))
+        .run();
       appendDeploymentLog(
         deploymentId,
-        previousActivePort === null ? "Restored routing to the previous state with no active port." : `Restored routing to previous active port ${previousActivePort}.`,
+        previousActivePort === null
+          ? "Restored routing to the previous state with no active port."
+          : `Restored routing to previous active port ${previousActivePort}.`,
         "stderr",
-        secrets
+        secrets,
       );
       const caddy = await writeAndReloadCaddy();
       appendDeploymentLog(
         deploymentId,
-        caddy.ok ? "Caddy config reloaded after failed rollout cleanup." : `Caddy reload after failed rollout cleanup skipped/failed: ${caddy.detail}`,
+        caddy.ok
+          ? "Caddy config reloaded after failed rollout cleanup."
+          : `Caddy reload after failed rollout cleanup skipped/failed: ${caddy.detail}`,
         caddy.ok ? "system" : "stderr",
-        secrets
+        secrets,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      appendDeploymentLog(deploymentId, `Failed to restore routing after failed rollout: ${message}`, "stderr", secrets);
+      appendDeploymentLog(
+        deploymentId,
+        `Failed to restore routing after failed rollout: ${message}`,
+        "stderr",
+        secrets,
+      );
     }
   }
 
   if (tempContainerName && shouldRemoveTempContainer) {
     await removeDeploymentContainer({
       containerName: tempContainerName,
-      log: (line, stream = "system") => appendDeploymentLog(deploymentId, line, stream, secrets),
-      runBufferedDocker: (args) => runBufferedCommand("docker", args)
+      log: (line, stream = "system") =>
+        appendDeploymentLog(deploymentId, line, stream, secrets),
+      runBufferedDocker: (args) => runBufferedCommand("docker", args),
     });
   }
 }
 
-async function cleanupInterruptedDeploymentContainers(interruptedDeployments: { id: string; serviceId: string; containerName: string | null }[]) {
+async function cleanupInterruptedDeploymentContainers(
+  interruptedDeployments: {
+    id: string;
+    serviceId: string;
+    containerName: string | null;
+  }[],
+) {
   for (const deployment of interruptedDeployments) {
     const service = getServiceById(deployment.serviceId);
-    if (!service || isDatabaseService(service) || isWorkerService(service)) continue;
+    if (!service || isDatabaseService(service) || isWorkerService(service))
+      continue;
 
-    const stableContainerName = deployment.containerName ?? containerNameForService(service.id);
-    const containerName = service.staticOutput?.trim() ? `deploy-export-${safeDockerIdentifier(deployment.id, "export")}` : `${stableContainerName}-${deployment.id}`;
+    const stableContainerName =
+      deployment.containerName ?? containerNameForService(service.id);
+    const containerName = service.staticOutput?.trim()
+      ? `deploy-export-${safeDockerIdentifier(deployment.id, "export")}`
+      : `${stableContainerName}-${deployment.id}`;
     await removeDeploymentContainer({
       containerName,
-      log: (line, stream = "system") => appendDeploymentLog(deployment.id, line, stream),
-      runBufferedDocker: (args) => runBufferedCommand("docker", args)
+      log: (line, stream = "system") =>
+        appendDeploymentLog(deployment.id, line, stream),
+      runBufferedDocker: (args) => runBufferedCommand("docker", args),
     });
   }
 }
 
-async function appendContainerLogs(containerName: string, deploymentId: string, secrets: string[]) {
-  appendDeploymentLog(deploymentId, `Container startup logs from ${containerName}:`, "stderr", secrets);
+async function appendContainerLogs(
+  containerName: string,
+  deploymentId: string,
+  secrets: string[],
+) {
+  appendDeploymentLog(
+    deploymentId,
+    `Container startup logs from ${containerName}:`,
+    "stderr",
+    secrets,
+  );
   const args = ["logs", "--tail", "120", containerName];
-  appendDeploymentLog(deploymentId, deploymentLogCommand("docker", args, secrets));
+  appendDeploymentLog(
+    deploymentId,
+    deploymentLogCommand("docker", args, secrets),
+  );
   const result = await runBufferedCommand("docker", args);
   appendCommandOutputLogs(deploymentId, result.stdout, "stdout", secrets);
   appendCommandOutputLogs(deploymentId, result.stderr, "stderr", secrets);
   if (result.code !== 0) {
-    appendDeploymentLog(deploymentId, `Could not read container logs: ${(result.stderr || result.stdout || "docker logs failed").trim()}`, "stderr", secrets);
+    appendDeploymentLog(
+      deploymentId,
+      `Could not read container logs: ${(result.stderr || result.stdout || "docker logs failed").trim()}`,
+      "stderr",
+      secrets,
+    );
   }
-  return redactLine([result.stdout, result.stderr].filter(Boolean).join("\n"), secrets);
+  return redactLine(
+    [result.stdout, result.stderr].filter(Boolean).join("\n"),
+    secrets,
+  );
 }
 
 function detectListeningPorts(logs: string) {
@@ -464,7 +634,7 @@ function detectListeningPorts(logs: string) {
   const patterns = [
     /\b(?:at|on)\s+(?:https?:\/\/)?(?:0\.0\.0\.0|127\.0\.0\.1|localhost|\[::\])?:([0-9]{2,5})\b/gi,
     /\b(?:listening|serving|running)[^\n]{0,120}?(?:port\s+|:)([0-9]{2,5})\b/gi,
-    /\bport\s*[=:]\s*([0-9]{2,5})\b/gi
+    /\bport\s*[=:]\s*([0-9]{2,5})\b/gi,
   ];
 
   for (const pattern of patterns) {
@@ -479,14 +649,21 @@ function detectListeningPorts(logs: string) {
   return Array.from(ports);
 }
 
-function appendContainerPortHint(deploymentId: string, logs: string, configuredPort: number, secrets: string[]) {
-  const suggestedPort = detectListeningPorts(logs).find((port) => port !== configuredPort);
+function appendContainerPortHint(
+  deploymentId: string,
+  logs: string,
+  configuredPort: number,
+  secrets: string[],
+) {
+  const suggestedPort = detectListeningPorts(logs).find(
+    (port) => port !== configuredPort,
+  );
   if (suggestedPort) {
     appendDeploymentLog(
       deploymentId,
       `Hint: the container logs mention port ${suggestedPort}, but this service is configured to route traffic to container port ${configuredPort}. Update the service Container port to ${suggestedPort} and redeploy, or make the container listen on ${configuredPort}.`,
       "stderr",
-      secrets
+      secrets,
     );
     return;
   }
@@ -495,21 +672,31 @@ function appendContainerPortHint(deploymentId: string, logs: string, configuredP
     deploymentId,
     `Hint: the container stayed running, but nothing answered on configured container port ${configuredPort}. Check the image's exposed/listening port and update the service Container port if it differs.`,
     "stderr",
-    secrets
+    secrets,
   );
 }
 
-async function probeContainerStartup(port: number, containerName: string, timeoutMs = 20000) {
+async function probeContainerStartup(
+  port: number,
+  containerName: string,
+  timeoutMs = 20000,
+) {
   const startTime = Date.now();
   while (Date.now() - startTime <= timeoutMs) {
     const state = await getContainerState(containerName);
     if (state?.restarting) {
-      const exitText = Number.isFinite(state.exitCode) ? ` with exit code ${state.exitCode}` : "";
+      const exitText = Number.isFinite(state.exitCode)
+        ? ` with exit code ${state.exitCode}`
+        : "";
       const errorText = state.error ? `: ${state.error}` : "";
-      throw new Error(`Container entered a restart loop${exitText}${errorText}`);
+      throw new Error(
+        `Container entered a restart loop${exitText}${errorText}`,
+      );
     }
     if (state && !state.running) {
-      const exitText = Number.isFinite(state.exitCode) ? ` with exit code ${state.exitCode}` : "";
+      const exitText = Number.isFinite(state.exitCode)
+        ? ` with exit code ${state.exitCode}`
+        : "";
       const errorText = state.error ? `: ${state.error}` : "";
       throw new Error(`Container exited during startup${exitText}${errorText}`);
     }
@@ -522,7 +709,9 @@ async function probeContainerStartup(port: number, containerName: string, timeou
     }
   }
 
-  throw new Error(`TCP/HTTP health probe timed out on port ${port} after ${timeoutMs}ms`);
+  throw new Error(
+    `TCP/HTTP health probe timed out on port ${port} after ${timeoutMs}ms`,
+  );
 }
 
 async function probeWorkerStartup(containerName: string, timeoutMs = 8000) {
@@ -531,12 +720,18 @@ async function probeWorkerStartup(containerName: string, timeoutMs = 8000) {
   while (Date.now() - startTime <= timeoutMs) {
     const state = await getContainerState(containerName);
     if (state?.restarting) {
-      const exitText = Number.isFinite(state.exitCode) ? ` with exit code ${state.exitCode}` : "";
+      const exitText = Number.isFinite(state.exitCode)
+        ? ` with exit code ${state.exitCode}`
+        : "";
       const errorText = state.error ? `: ${state.error}` : "";
-      throw new Error(`Container entered a restart loop${exitText}${errorText}`);
+      throw new Error(
+        `Container entered a restart loop${exitText}${errorText}`,
+      );
     }
     if (state && !state.running) {
-      const exitText = Number.isFinite(state.exitCode) ? ` with exit code ${state.exitCode}` : "";
+      const exitText = Number.isFinite(state.exitCode)
+        ? ` with exit code ${state.exitCode}`
+        : "";
       const errorText = state.error ? `: ${state.error}` : "";
       throw new Error(`Container exited during startup${exitText}${errorText}`);
     }
@@ -547,7 +742,9 @@ async function probeWorkerStartup(containerName: string, timeoutMs = 8000) {
     await delay(250);
   }
   if (!observedRunning) {
-    throw new Error(`Container did not reach running state after ${timeoutMs}ms`);
+    throw new Error(
+      `Container did not reach running state after ${timeoutMs}ms`,
+    );
   }
 }
 
@@ -556,9 +753,16 @@ function packageManagerFromPackageJson(sourceDir: string) {
   if (!existsSync(packageJsonPath)) return null;
 
   try {
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { packageManager?: string };
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      packageManager?: string;
+    };
     const packageManager = packageJson.packageManager?.split("@")[0];
-    if (packageManager === "bun" || packageManager === "pnpm" || packageManager === "yarn" || packageManager === "npm") {
+    if (
+      packageManager === "bun" ||
+      packageManager === "pnpm" ||
+      packageManager === "yarn" ||
+      packageManager === "npm"
+    ) {
       return packageManager;
     }
   } catch {
@@ -569,7 +773,11 @@ function packageManagerFromPackageJson(sourceDir: string) {
 }
 
 function detectPackageManager(sourceDir: string, commands: string[]) {
-  if (commands.some((command) => /\bbun\b/.test(command)) || existsSync(join(sourceDir, "bun.lock")) || existsSync(join(sourceDir, "bun.lockb"))) {
+  if (
+    commands.some((command) => /\bbun\b/.test(command)) ||
+    existsSync(join(sourceDir, "bun.lock")) ||
+    existsSync(join(sourceDir, "bun.lockb"))
+  ) {
     return "bun";
   }
 
@@ -606,7 +814,11 @@ function preferredServiceUrl(service: Service) {
     .from(services)
     .where(eq(services.id, service.id))
     .get();
-  const port = freshService?.activePort ?? freshService?.hostPort ?? service.activePort ?? service.hostPort;
+  const port =
+    freshService?.activePort ??
+    freshService?.hostPort ??
+    service.activePort ??
+    service.hostPort;
 
   return `http://127.0.0.1:${port}`;
 }
@@ -615,7 +827,12 @@ function getLastLiveServiceStatus(serviceId: string): "active" | "idle" {
   const latestRunning = db
     .select({ id: deployments.id })
     .from(deployments)
-    .where(and(eq(deployments.serviceId, serviceId), eq(deployments.status, "running")))
+    .where(
+      and(
+        eq(deployments.serviceId, serviceId),
+        eq(deployments.status, "running"),
+      ),
+    )
     .orderBy(desc(deployments.createdAt))
     .limit(1)
     .get();
@@ -624,18 +841,32 @@ function getLastLiveServiceStatus(serviceId: string): "active" | "idle" {
 }
 
 export function abortDeployment(deploymentId: string) {
-  const deployment = db.select().from(deployments).where(eq(deployments.id, deploymentId)).get();
+  const deployment = db
+    .select()
+    .from(deployments)
+    .where(eq(deployments.id, deploymentId))
+    .get();
   if (!deployment) {
     throw new Error("Deployment not found");
   }
 
   if (deployment.status === "queued") {
-    db.update(deployments).set({ status: "aborted", finishedAt: now() }).where(eq(deployments.id, deploymentId)).run();
+    db.update(deployments)
+      .set({ status: "aborted", finishedAt: now() })
+      .where(eq(deployments.id, deploymentId))
+      .run();
     db.update(services)
-      .set({ status: getLastLiveServiceStatus(deployment.serviceId), updatedAt: now() })
+      .set({
+        status: getLastLiveServiceStatus(deployment.serviceId),
+        updatedAt: now(),
+      })
       .where(eq(services.id, deployment.serviceId))
       .run();
-    appendDeploymentLog(deploymentId, "Deployment aborted before start.", "stderr");
+    appendDeploymentLog(
+      deploymentId,
+      "Deployment aborted before start.",
+      "stderr",
+    );
     return { accepted: true };
   }
 
@@ -644,8 +875,15 @@ export function abortDeployment(deploymentId: string) {
   }
 
   abortRequests.add(deploymentId);
-  db.update(deployments).set({ status: "aborted", finishedAt: now() }).where(eq(deployments.id, deploymentId)).run();
-  appendDeploymentLog(deploymentId, "Abort requested. Stopping build…", "stderr");
+  db.update(deployments)
+    .set({ status: "aborted", finishedAt: now() })
+    .where(eq(deployments.id, deploymentId))
+    .run();
+  appendDeploymentLog(
+    deploymentId,
+    "Abort requested. Stopping build…",
+    "stderr",
+  );
 
   const child = activeCommands.get(deploymentId);
   if (child && !child.killed) {
@@ -664,7 +902,12 @@ export function abortDeployment(deploymentId: string) {
 function supersedeRunningDeployments(serviceId: string) {
   db.update(deployments)
     .set({ status: "superseded" })
-    .where(and(eq(deployments.serviceId, serviceId), eq(deployments.status, "running")))
+    .where(
+      and(
+        eq(deployments.serviceId, serviceId),
+        eq(deployments.status, "running"),
+      ),
+    )
     .run();
 }
 
@@ -683,7 +926,10 @@ function normalizeRunningDeployments() {
       continue;
     }
 
-    db.update(deployments).set({ status: "superseded" }).where(eq(deployments.id, deployment.id)).run();
+    db.update(deployments)
+      .set({ status: "superseded" })
+      .where(eq(deployments.id, deployment.id))
+      .run();
   }
 }
 
@@ -692,7 +938,13 @@ export function getServiceById(serviceId: string) {
 }
 
 export function allocateHostPort() {
-  const used = new Set(db.select({ hostPort: services.hostPort }).from(services).all().map((row) => row.hostPort));
+  const used = new Set(
+    db
+      .select({ hostPort: services.hostPort })
+      .from(services)
+      .all()
+      .map((row) => row.hostPort),
+  );
   for (let attempt = 0; attempt < 200; attempt += 1) {
     const port = randomInt(10000, 61000);
     if (!used.has(port)) {
@@ -710,16 +962,149 @@ export function allocateHostPort() {
 }
 
 export async function removeServiceRuntime(service: Service) {
+  const stack = getComposeStack(service.id);
+  if (stack) {
+    const { args } = composeArgs(stack, service.id);
+    await runBufferedCommand("docker", [...args, "down", "--remove-orphans"]);
+    rmSync(resolve(config.dataDir, "compose", service.id), {
+      recursive: true,
+      force: true,
+    });
+    return;
+  }
   const containerName = containerNameForService(service.id);
   rmSync(staticSiteDirForService(service.id), { recursive: true, force: true });
   return new Promise<void>((resolvePromise) => {
     const child = spawn("docker", ["rm", "-f", containerName], {
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     child.on("error", () => resolvePromise());
     child.on("close", () => resolvePromise());
   });
+}
+
+async function runComposeDeployment(deployment: Deployment, service: Service) {
+  const startedAt = now();
+  const sourceDir = composeWorkspace(service.id);
+  const secrets = Object.values(getEnvForService(service.id)).filter(Boolean);
+  db.update(deployments)
+    .set({ status: "building", startedAt })
+    .where(eq(deployments.id, deployment.id))
+    .run();
+  db.update(services)
+    .set({ status: "building", updatedAt: startedAt })
+    .where(eq(services.id, service.id))
+    .run();
+
+  try {
+    rmSync(sourceDir, { recursive: true, force: true });
+    mkdirSync(sourceDir, { recursive: true });
+    const authToken = await cloneAuthTokenForService(service);
+    if (authToken) secrets.push(authToken);
+    await runCommand(
+      "git",
+      [
+        "clone",
+        "--depth",
+        "1",
+        "--branch",
+        service.branch,
+        cloneUrlWithToken(service.repoUrl, authToken),
+        sourceDir,
+      ],
+      deployment.id,
+      { redact: secrets },
+    );
+    if (deployment.commitSha)
+      await runCommand(
+        "git",
+        ["fetch", "--depth", "1", "origin", deployment.commitSha],
+        deployment.id,
+        { cwd: sourceDir, redact: secrets },
+      );
+    if (deployment.commitSha)
+      await runCommand(
+        "git",
+        ["checkout", deployment.commitSha],
+        deployment.id,
+        { cwd: sourceDir, redact: secrets },
+      );
+
+    const current = getComposeStack(service.id);
+    if (!current) throw new Error("Compose stack configuration is missing");
+    const stack = saveComposeStack(
+      service.id,
+      readManifestFromWorkspace(sourceDir),
+      current.project,
+      current.domain,
+    );
+    writeComposeOverride(stack, service.id, sourceDir);
+    const { args } = composeArgs(stack, service.id, sourceDir);
+    await runCommand("docker", [...args, "config", "--quiet"], deployment.id, {
+      env: getEnvForService(service.id),
+      redact: secrets,
+    });
+    await runCommand(
+      "docker",
+      [...args, "up", "--build", "--detach", "--remove-orphans"],
+      deployment.id,
+      { env: getEnvForService(service.id), redact: secrets },
+    );
+    for (const [name, settings] of Object.entries(stack.services)) {
+      if (settings.ignore)
+        await runCommand(
+          "docker",
+          [...args, "rm", "--stop", "--force", name],
+          deployment.id,
+          { env: getEnvForService(service.id), redact: secrets },
+        );
+    }
+
+    const deployedAt = now();
+    supersedeRunningDeployments(service.id);
+    db.update(deployments)
+      .set({ status: "running", finishedAt: deployedAt })
+      .where(eq(deployments.id, deployment.id))
+      .run();
+    db.update(services)
+      .set({
+        status: "active",
+        lastDeployedAt: deployedAt,
+        updatedAt: deployedAt,
+      })
+      .where(eq(services.id, service.id))
+      .run();
+    const caddy = await writeAndReloadCaddy();
+    appendDeploymentLog(
+      deployment.id,
+      caddy.ok
+        ? "Caddy config reloaded."
+        : `Caddy reload failed: ${caddy.detail}`,
+    );
+    for (const [key, route] of Object.entries(stack.routes))
+      if (route.expose)
+        appendDeploymentLog(
+          deployment.id,
+          `Route ${key}: https://${composeHostname(stack, key)}`,
+        );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendDeploymentLog(
+      deployment.id,
+      `Compose deployment failed: ${message}`,
+      "stderr",
+      secrets,
+    );
+    db.update(deployments)
+      .set({ status: "failed", finishedAt: now() })
+      .where(eq(deployments.id, deployment.id))
+      .run();
+    db.update(services)
+      .set({ status: "failed", updatedAt: now() })
+      .where(eq(services.id, service.id))
+      .run();
+  }
 }
 
 function normalizedStaticOutputPath(staticOutput: string) {
@@ -735,7 +1120,12 @@ function staticOutputPathInImage(service: Service, hasCustomCommands: boolean) {
   return `/app/${normalized}`;
 }
 
-async function exportStaticSiteFromImage(deployment: Deployment, service: Service, imageTag: string, hasCustomCommands: boolean) {
+async function exportStaticSiteFromImage(
+  deployment: Deployment,
+  service: Service,
+  imageTag: string,
+  hasCustomCommands: boolean,
+) {
   const imagePath = staticOutputPathInImage(service, hasCustomCommands);
   if (!imagePath) {
     throw new Error("Static output path is not configured");
@@ -746,18 +1136,38 @@ async function exportStaticSiteFromImage(deployment: Deployment, service: Servic
   rmSync(staticDir, { recursive: true, force: true });
   mkdirSync(staticDir, { recursive: true });
 
-  appendDeploymentLog(deployment.id, `Exporting static output from ${imagePath}.`);
-  await runCommand("docker", ["create", "--name", exportContainer, imageTag], deployment.id);
+  appendDeploymentLog(
+    deployment.id,
+    `Exporting static output from ${imagePath}.`,
+  );
+  await runCommand(
+    "docker",
+    ["create", "--name", exportContainer, imageTag],
+    deployment.id,
+  );
   try {
-    await runCommand("docker", ["cp", `${exportContainer}:${imagePath}/.`, staticDir], deployment.id);
+    await runCommand(
+      "docker",
+      ["cp", `${exportContainer}:${imagePath}/.`, staticDir],
+      deployment.id,
+    );
   } finally {
-    await runCommand("docker", ["rm", "-f", exportContainer], deployment.id).catch(() => {
-      appendDeploymentLog(deployment.id, `No export container named ${exportContainer} was left behind.`);
+    await runCommand(
+      "docker",
+      ["rm", "-f", exportContainer],
+      deployment.id,
+    ).catch(() => {
+      appendDeploymentLog(
+        deployment.id,
+        `No export container named ${exportContainer} was left behind.`,
+      );
     });
   }
 
   if (!existsSync(staticDir)) {
-    throw new Error(`Static output directory ${imagePath} could not be exported`);
+    throw new Error(
+      `Static output directory ${imagePath} could not be exported`,
+    );
   }
 
   if (!existsSync(join(staticDir, "index.html"))) {
@@ -766,7 +1176,9 @@ async function exportStaticSiteFromImage(deployment: Deployment, service: Servic
       if (!existsSync(join(candidateDir, "index.html"))) continue;
 
       for (const entry of readdirSync(candidateDir)) {
-        cpSync(join(candidateDir, entry), join(staticDir, entry), { recursive: true });
+        cpSync(join(candidateDir, entry), join(staticDir, entry), {
+          recursive: true,
+        });
       }
       rmSync(candidateDir, { recursive: true, force: true });
       break;
@@ -774,7 +1186,9 @@ async function exportStaticSiteFromImage(deployment: Deployment, service: Servic
   }
 
   if (!existsSync(join(staticDir, "index.html"))) {
-    throw new Error(`Static output ${imagePath} does not contain index.html. This looks like a server-rendered build, not a static site.`);
+    throw new Error(
+      `Static output ${imagePath} does not contain index.html. This looks like a server-rendered build, not a static site.`,
+    );
   }
 }
 
@@ -795,18 +1209,26 @@ export function enqueueDeployment(serviceId: string, options: EnqueueOptions) {
     containerName: null,
     startedAt: null,
     finishedAt: null,
-    createdAt
+    createdAt,
   };
 
   db.insert(deployments).values(deployment).run();
   if (service.status !== "building") {
-    db.update(services).set({ status: "queued", updatedAt: createdAt }).where(eq(services.id, service.id)).run();
+    db.update(services)
+      .set({ status: "queued", updatedAt: createdAt })
+      .where(eq(services.id, service.id))
+      .run();
   }
-  appendDeploymentLog(deployment.id, `Deployment queued from ${options.trigger}.`);
+  appendDeploymentLog(
+    deployment.id,
+    `Deployment queued from ${options.trigger}.`,
+  );
   return deployment;
 }
 
 async function runDeployment(deployment: Deployment, service: Service) {
+  if (getComposeStack(service.id))
+    return runComposeDeployment(deployment, service);
   const startedAt = now();
   const isDatabase = isDatabaseService(service);
   const isFunction = isFunctionService(service);
@@ -820,12 +1242,23 @@ async function runDeployment(deployment: Deployment, service: Service) {
     const databaseImageName = databaseImageForService(service, dbType);
 
     db.update(deployments)
-      .set({ status: "building", startedAt, imageTag: databaseImageName, containerName })
+      .set({
+        status: "building",
+        startedAt,
+        imageTag: databaseImageName,
+        containerName,
+      })
       .where(eq(deployments.id, deployment.id))
       .run();
-    db.update(services).set({ status: "building", updatedAt: now() }).where(eq(services.id, service.id)).run();
+    db.update(services)
+      .set({ status: "building", updatedAt: now() })
+      .where(eq(services.id, service.id))
+      .run();
 
-    appendDeploymentLog(deployment.id, `Provisioning database service ${service.name} (${dbType})...`);
+    appendDeploymentLog(
+      deployment.id,
+      `Provisioning database service ${service.name} (${dbType})...`,
+    );
 
     try {
       await ensureDockerAvailable(deployment.id);
@@ -834,22 +1267,34 @@ async function runDeployment(deployment: Deployment, service: Service) {
         containerName,
         password: env.REDIS_PASSWORD,
         getContainerState,
-        runDocker: (args: string[]) => runCommand("docker", args, deployment.id, { redact: secrets }),
-        runBufferedDocker: (args: string[]) => runBufferedCommand("docker", args),
-        log: (line: string) => appendDeploymentLog(deployment.id, line, "system", secrets),
-        warn: (line: string) => appendDeploymentLog(deployment.id, line, "stderr", secrets)
+        runDocker: (args: string[]) =>
+          runCommand("docker", args, deployment.id, { redact: secrets }),
+        runBufferedDocker: (args: string[]) =>
+          runBufferedCommand("docker", args),
+        log: (line: string) =>
+          appendDeploymentLog(deployment.id, line, "system", secrets),
+        warn: (line: string) =>
+          appendDeploymentLog(deployment.id, line, "stderr", secrets),
       };
 
       const caddy = await writeAndReloadCaddy();
-      appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config written for database public hostnames." : `Caddy reload skipped/failed: ${caddy.detail}`);
-      appendDeploymentLog(deployment.id, `Pulling database image: ${databaseImageName}`);
+      appendDeploymentLog(
+        deployment.id,
+        caddy.ok
+          ? "Caddy config written for database public hostnames."
+          : `Caddy reload skipped/failed: ${caddy.detail}`,
+      );
+      appendDeploymentLog(
+        deployment.id,
+        `Pulling database image: ${databaseImageName}`,
+      );
       await runCommand("docker", ["pull", databaseImageName], deployment.id);
       await ensureProjectRuntimeNetwork({
         service,
         containerNameForService,
         runDocker: (args) => runCommand("docker", args, deployment.id),
         runBufferedDocker: (args) => runBufferedCommand("docker", args),
-        log: (line) => appendDeploymentLog(deployment.id, line)
+        log: (line) => appendDeploymentLog(deployment.id, line),
       });
       if (dbType === "redis") {
         await saveRedisDatasetIfRunning(redisPersistence);
@@ -860,34 +1305,61 @@ async function runDeployment(deployment: Deployment, service: Service) {
         existingContainerName: containerName,
         runDocker: (args) => runCommand("docker", args, deployment.id),
         runBufferedDocker: (args) => runBufferedCommand("docker", args),
-        log: (line) => appendDeploymentLog(deployment.id, line)
+        log: (line) => appendDeploymentLog(deployment.id, line),
       });
 
       if (dbType === "redis") {
-        const hadRedisContainer = await stopRedisContainerForReplacement(redisPersistence);
+        const hadRedisContainer =
+          await stopRedisContainerForReplacement(redisPersistence);
         if (hadRedisContainer) {
-          await runCommand("docker", ["rm", containerName], deployment.id, { redact: secrets });
+          await runCommand("docker", ["rm", containerName], deployment.id, {
+            redact: secrets,
+          });
         } else {
-          appendDeploymentLog(deployment.id, `No previous Redis container named ${containerName} was present.`);
+          appendDeploymentLog(
+            deployment.id,
+            `No previous Redis container named ${containerName} was present.`,
+          );
         }
       } else {
-        await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => {
-          appendDeploymentLog(deployment.id, `No previous container named ${containerName} was running.`);
+        await runCommand(
+          "docker",
+          ["rm", "-f", containerName],
+          deployment.id,
+        ).catch(() => {
+          appendDeploymentLog(
+            deployment.id,
+            `No previous container named ${containerName} was running.`,
+          );
         });
       }
 
       const bindHost = "0.0.0.0";
-      const postgresTlsAssets = isPostgresFamilyDatabase(dbType) ? await ensurePostgresTlsAssets(service) : null;
+      const postgresTlsAssets = isPostgresFamilyDatabase(dbType)
+        ? await ensurePostgresTlsAssets(service)
+        : null;
       if (postgresTlsAssets) {
-        appendDeploymentLog(deployment.id, "Preparing Postgres TLS certificates...");
-        await runCommand("docker", postgresTlsVolumeCreateDockerArgs(postgresTlsAssets), deployment.id);
-        const prep = postgresTlsVolumePrepareDockerPlan(databaseImageName, postgresTlsAssets);
+        appendDeploymentLog(
+          deployment.id,
+          "Preparing Postgres TLS certificates...",
+        );
+        await runCommand(
+          "docker",
+          postgresTlsVolumeCreateDockerArgs(postgresTlsAssets),
+          deployment.id,
+        );
+        const prep = postgresTlsVolumePrepareDockerPlan(
+          databaseImageName,
+          postgresTlsAssets,
+        );
         try {
           for (const args of prep.commands) {
             await runCommand("docker", args, deployment.id);
           }
         } finally {
-          await runCommand("docker", prep.cleanupCommand, deployment.id).catch(() => undefined);
+          await runCommand("docker", prep.cleanupCommand, deployment.id).catch(
+            () => undefined,
+          );
         }
       }
 
@@ -900,7 +1372,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
         containerName,
         ...runtimeNetworkArgs(service),
         "-p",
-        `${bindHost}:${service.hostPort}:${service.internalPort}`
+        `${bindHost}:${service.hostPort}:${service.internalPort}`,
       ];
       dockerArgs.push("-v", databaseDataVolumeArg(service.id, dbType));
       if (postgresTlsAssets) {
@@ -918,37 +1390,74 @@ async function runDeployment(deployment: Deployment, service: Service) {
       }
       dockerArgs.push(...databaseContainerCommandArgs(dbType, env));
 
-      appendDeploymentLog(deployment.id, `Running container mapping ${bindHost}:${service.hostPort} to internal port ${service.internalPort}...`);
-      await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
+      appendDeploymentLog(
+        deployment.id,
+        `Running container mapping ${bindHost}:${service.hostPort} to internal port ${service.internalPort}...`,
+      );
+      await runCommand("docker", dockerArgs, deployment.id, {
+        redact: secrets,
+      });
       if (isPostgresFamilyDatabase(dbType)) {
         await ensurePostgresLogicalReplication({
           service,
           containerName,
           env,
-          runDocker: (args) => runCommand("docker", args, deployment.id, { redact: secrets }),
+          runDocker: (args) =>
+            runCommand("docker", args, deployment.id, { redact: secrets }),
           runBufferedDocker: (args) => runBufferedCommand("docker", args),
-          log: (line) => appendDeploymentLog(deployment.id, line, "system", secrets)
+          log: (line) =>
+            appendDeploymentLog(deployment.id, line, "system", secrets),
         });
       }
 
       const deployedAt = now();
       supersedeRunningDeployments(service.id);
-      db.update(deployments).set({ status: "running", finishedAt: deployedAt }).where(eq(deployments.id, deployment.id)).run();
+      db.update(deployments)
+        .set({ status: "running", finishedAt: deployedAt })
+        .where(eq(deployments.id, deployment.id))
+        .run();
       db.update(services)
-        .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt })
+        .set({
+          status: "active",
+          lastDeployedAt: deployedAt,
+          updatedAt: deployedAt,
+        })
         .where(eq(services.id, service.id))
         .run();
       if (service.databasePublicHostname) {
-        appendDeploymentLog(deployment.id, `Database successfully provisioned with public TCP access at ${service.databasePublicHostname}:${service.hostPort}.`);
-        appendDeploymentLog(deployment.id, `If a firewall is enabled, allow TCP ${service.hostPort} before connecting externally.`);
+        appendDeploymentLog(
+          deployment.id,
+          `Database successfully provisioned with public TCP access at ${service.databasePublicHostname}:${service.hostPort}.`,
+        );
+        appendDeploymentLog(
+          deployment.id,
+          `If a firewall is enabled, allow TCP ${service.hostPort} before connecting externally.`,
+        );
       } else {
-        appendDeploymentLog(deployment.id, `Database successfully provisioned with public TCP access on port ${service.hostPort}.`);
+        appendDeploymentLog(
+          deployment.id,
+          `Database successfully provisioned with public TCP access on port ${service.hostPort}.`,
+        );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown database deployment error";
-      appendDeploymentLog(deployment.id, `Database provisioning failed: ${message}`, "stderr", secrets);
-      db.update(deployments).set({ status: "failed", finishedAt: now() }).where(eq(deployments.id, deployment.id)).run();
-      db.update(services).set({ status: "failed", updatedAt: now() }).where(eq(services.id, service.id)).run();
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unknown database deployment error";
+      appendDeploymentLog(
+        deployment.id,
+        `Database provisioning failed: ${message}`,
+        "stderr",
+        secrets,
+      );
+      db.update(deployments)
+        .set({ status: "failed", finishedAt: now() })
+        .where(eq(deployments.id, deployment.id))
+        .run();
+      db.update(services)
+        .set({ status: "failed", updatedAt: now() })
+        .where(eq(services.id, service.id))
+        .run();
     }
     return;
   }
@@ -966,58 +1475,105 @@ async function runDeployment(deployment: Deployment, service: Service) {
         .set({ status: "failed", startedAt, finishedAt: now(), containerName })
         .where(eq(deployments.id, deployment.id))
         .run();
-      db.update(services).set({ status: "failed", updatedAt: now() }).where(eq(services.id, service.id)).run();
-      appendDeploymentLog(deployment.id, "Docker image deployment failed: service is missing an image reference.", "stderr");
+      db.update(services)
+        .set({ status: "failed", updatedAt: now() })
+        .where(eq(services.id, service.id))
+        .run();
+      appendDeploymentLog(
+        deployment.id,
+        "Docker image deployment failed: service is missing an image reference.",
+        "stderr",
+      );
       return;
     }
 
     db.update(deployments)
-      .set({ status: "building", startedAt, imageTag: imageName, containerName })
+      .set({
+        status: "building",
+        startedAt,
+        imageTag: imageName,
+        containerName,
+      })
       .where(eq(deployments.id, deployment.id))
       .run();
-    db.update(services).set({ status: "building", updatedAt: now() }).where(eq(services.id, service.id)).run();
+    db.update(services)
+      .set({ status: "building", updatedAt: now() })
+      .where(eq(services.id, service.id))
+      .run();
 
-    appendDeploymentLog(deployment.id, `Preparing Docker image service ${service.name}.`);
+    appendDeploymentLog(
+      deployment.id,
+      `Preparing Docker image service ${service.name}.`,
+    );
     ensureDefaultDomainForService(service);
 
     try {
       if (config.deployDryRun) {
-        appendDeploymentLog(deployment.id, "Dry-run mode is enabled. Skipping Docker pull and run.");
+        appendDeploymentLog(
+          deployment.id,
+          "Dry-run mode is enabled. Skipping Docker pull and run.",
+        );
         await new Promise((resolvePromise) => setTimeout(resolvePromise, 800));
         const deployedAt = now();
         supersedeRunningDeployments(service.id);
         db.update(deployments)
-          .set({ status: "running", finishedAt: deployedAt, imageTag: imageName, containerName })
+          .set({
+            status: "running",
+            finishedAt: deployedAt,
+            imageTag: imageName,
+            containerName,
+          })
           .where(eq(deployments.id, deployment.id))
           .run();
         db.update(services)
-          .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt, ...(isWorker ? { activePort: null } : {}) })
+          .set({
+            status: "active",
+            lastDeployedAt: deployedAt,
+            updatedAt: deployedAt,
+            ...(isWorker ? { activePort: null } : {}),
+          })
           .where(eq(services.id, service.id))
           .run();
         const caddy = await writeAndReloadCaddy();
-        appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config reloaded." : `Caddy reload skipped/failed: ${caddy.detail}`);
         appendDeploymentLog(
           deployment.id,
-          isWorker ? "Dry-run Docker image worker deployment marked running." : `Dry-run Docker image deployment marked running at ${preferredServiceUrl(service)}.`
+          caddy.ok
+            ? "Caddy config reloaded."
+            : `Caddy reload skipped/failed: ${caddy.detail}`,
+        );
+        appendDeploymentLog(
+          deployment.id,
+          isWorker
+            ? "Dry-run Docker image worker deployment marked running."
+            : `Dry-run Docker image deployment marked running at ${preferredServiceUrl(service)}.`,
         );
         return;
       }
 
       await ensureDockerAvailable(deployment.id);
       appendDeploymentLog(deployment.id, `Pulling Docker image: ${imageName}`);
-      await runCommand("docker", ["pull", imageName], deployment.id, { redact: secrets });
+      await runCommand("docker", ["pull", imageName], deployment.id, {
+        redact: secrets,
+      });
 
       await ensureProjectRuntimeNetwork({
         service,
         containerNameForService,
         runDocker: (args) => runCommand("docker", args, deployment.id),
         runBufferedDocker: (args) => runBufferedCommand("docker", args),
-        log: (line) => appendDeploymentLog(deployment.id, line)
+        log: (line) => appendDeploymentLog(deployment.id, line),
       });
 
       if (isWorker) {
-        appendDeploymentLog(deployment.id, `Stopping and removing old worker container ${containerName} if it exists...`);
-        await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => undefined);
+        appendDeploymentLog(
+          deployment.id,
+          `Stopping and removing old worker container ${containerName} if it exists...`,
+        );
+        await runCommand(
+          "docker",
+          ["rm", "-f", containerName],
+          deployment.id,
+        ).catch(() => undefined);
 
         const dockerArgs = [
           "run",
@@ -1026,49 +1582,93 @@ async function runDeployment(deployment: Deployment, service: Service) {
           "unless-stopped",
           "--name",
           containerName,
-          ...runtimeNetworkArgs(service)
+          ...runtimeNetworkArgs(service),
         ];
         for (const [key, value] of Object.entries(env)) {
           dockerArgs.push("--env", `${key}=${value}`);
         }
         dockerArgs.push(imageName);
 
-        appendDeploymentLog(deployment.id, `Starting Docker image worker container ${containerName} without a published port...`);
-        await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
+        appendDeploymentLog(
+          deployment.id,
+          `Starting Docker image worker container ${containerName} without a published port...`,
+        );
+        await runCommand("docker", dockerArgs, deployment.id, {
+          redact: secrets,
+        });
 
-        appendDeploymentLog(deployment.id, "Checking worker process startup...");
+        appendDeploymentLog(
+          deployment.id,
+          "Checking worker process startup...",
+        );
         try {
           await probeWorkerStartup(containerName);
-          appendDeploymentLog(deployment.id, "Worker process stayed running. Container is healthy.");
+          appendDeploymentLog(
+            deployment.id,
+            "Worker process stayed running. Container is healthy.",
+          );
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
-          appendDeploymentLog(deployment.id, `Worker startup check failed: ${errMsg}.`, "stderr");
+          appendDeploymentLog(
+            deployment.id,
+            `Worker startup check failed: ${errMsg}.`,
+            "stderr",
+          );
           await appendContainerLogs(containerName, deployment.id, secrets);
-          appendDeploymentLog(deployment.id, "Cleaning up failed worker container...", "stderr");
-          await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => {});
+          appendDeploymentLog(
+            deployment.id,
+            "Cleaning up failed worker container...",
+            "stderr",
+          );
+          await runCommand(
+            "docker",
+            ["rm", "-f", containerName],
+            deployment.id,
+          ).catch(() => {});
           throw new Error(`Worker startup failed: ${errMsg}`);
         }
 
-        db.update(services).set({ activePort: null }).where(eq(services.id, service.id)).run();
+        db.update(services)
+          .set({ activePort: null })
+          .where(eq(services.id, service.id))
+          .run();
         const caddy = await writeAndReloadCaddy();
-        appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config reloaded." : `Caddy reload skipped/failed: ${caddy.detail}`);
+        appendDeploymentLog(
+          deployment.id,
+          caddy.ok
+            ? "Caddy config reloaded."
+            : `Caddy reload skipped/failed: ${caddy.detail}`,
+        );
 
         const deployedAt = now();
         supersedeRunningDeployments(service.id);
-        db.update(deployments).set({ status: "running", finishedAt: deployedAt }).where(eq(deployments.id, deployment.id)).run();
+        db.update(deployments)
+          .set({ status: "running", finishedAt: deployedAt })
+          .where(eq(deployments.id, deployment.id))
+          .run();
         db.update(services)
-          .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt })
+          .set({
+            status: "active",
+            lastDeployedAt: deployedAt,
+            updatedAt: deployedAt,
+          })
           .where(eq(services.id, service.id))
           .run();
 
-        appendDeploymentLog(deployment.id, "Docker image worker deployment successfully running.");
+        appendDeploymentLog(
+          deployment.id,
+          "Docker image worker deployment successfully running.",
+        );
         return;
       }
 
       const tempPort = await getEphemeralFreePort();
       const tempContainerName = `${containerName}-${deployment.id}`;
       webTempContainerName = tempContainerName;
-      appendDeploymentLog(deployment.id, `Allocated ephemeral port ${tempPort} for Docker image rollout.`);
+      appendDeploymentLog(
+        deployment.id,
+        `Allocated ephemeral port ${tempPort} for Docker image rollout.`,
+      );
 
       const dockerArgs = [
         "run",
@@ -1079,30 +1679,65 @@ async function runDeployment(deployment: Deployment, service: Service) {
         tempContainerName,
         ...runtimeNetworkArgs(service),
         "-p",
-        `127.0.0.1:${tempPort}:${runtimePort}`
+        `127.0.0.1:${tempPort}:${runtimePort}`,
       ];
-      for (const [key, value] of Object.entries({ ...env, PORT: String(runtimePort) })) {
+      for (const [key, value] of Object.entries({
+        ...env,
+        PORT: String(runtimePort),
+      })) {
         dockerArgs.push("--env", `${key}=${value}`);
       }
       dockerArgs.push(imageName);
 
-      appendDeploymentLog(deployment.id, `Starting Docker image container ${tempContainerName} mapping 127.0.0.1:${tempPort} to internal ${runtimePort}...`);
+      appendDeploymentLog(
+        deployment.id,
+        `Starting Docker image container ${tempContainerName} mapping 127.0.0.1:${tempPort} to internal ${runtimePort}...`,
+      );
       webTempContainerNeedsCleanup = true;
-      await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
+      await runCommand("docker", dockerArgs, deployment.id, {
+        redact: secrets,
+      });
 
-      appendDeploymentLog(deployment.id, `Probing port ${tempPort} for startup TCP health check...`);
+      appendDeploymentLog(
+        deployment.id,
+        `Probing port ${tempPort} for startup TCP health check...`,
+      );
       try {
         await probeContainerStartup(tempPort, tempContainerName);
-        appendDeploymentLog(deployment.id, "Startup TCP probe succeeded. Container is healthy.");
+        appendDeploymentLog(
+          deployment.id,
+          "Startup TCP probe succeeded. Container is healthy.",
+        );
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        appendDeploymentLog(deployment.id, `Startup health check failed: ${errMsg}.`, "stderr");
-        const startupLogs = await appendContainerLogs(tempContainerName, deployment.id, secrets);
+        appendDeploymentLog(
+          deployment.id,
+          `Startup health check failed: ${errMsg}.`,
+          "stderr",
+        );
+        const startupLogs = await appendContainerLogs(
+          tempContainerName,
+          deployment.id,
+          secrets,
+        );
         if (errMsg.includes("timed out")) {
-          appendContainerPortHint(deployment.id, startupLogs, runtimePort, secrets);
+          appendContainerPortHint(
+            deployment.id,
+            startupLogs,
+            runtimePort,
+            secrets,
+          );
         }
-        appendDeploymentLog(deployment.id, "Cleaning up temporary container...", "stderr");
-        await runCommand("docker", ["rm", "-f", tempContainerName], deployment.id)
+        appendDeploymentLog(
+          deployment.id,
+          "Cleaning up temporary container...",
+          "stderr",
+        );
+        await runCommand(
+          "docker",
+          ["rm", "-f", tempContainerName],
+          deployment.id,
+        )
           .then(() => {
             webTempContainerNeedsCleanup = false;
           })
@@ -1110,68 +1745,139 @@ async function runDeployment(deployment: Deployment, service: Service) {
         throw new Error(`Health check failed: ${errMsg}`);
       }
 
-      webPreviousActivePort = currentActivePortForService(service.id, service.activePort);
-      db.update(services).set({ activePort: tempPort }).where(eq(services.id, service.id)).run();
+      webPreviousActivePort = currentActivePortForService(
+        service.id,
+        service.activePort,
+      );
+      db.update(services)
+        .set({ activePort: tempPort })
+        .where(eq(services.id, service.id))
+        .run();
       webActivePortChanged = true;
 
-      appendDeploymentLog(deployment.id, "Hot-swapping traffic by reloading Caddy configuration...");
+      appendDeploymentLog(
+        deployment.id,
+        "Hot-swapping traffic by reloading Caddy configuration...",
+      );
       const caddy = await writeAndReloadCaddy();
-      appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config hot-reloaded successfully." : `Caddy reload failed: ${caddy.detail}`);
+      appendDeploymentLog(
+        deployment.id,
+        caddy.ok
+          ? "Caddy config hot-reloaded successfully."
+          : `Caddy reload failed: ${caddy.detail}`,
+      );
 
-      appendDeploymentLog(deployment.id, "Waiting 300ms for active connections to drain gracefully...");
+      appendDeploymentLog(
+        deployment.id,
+        "Waiting 300ms for active connections to drain gracefully...",
+      );
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 300));
 
-      appendDeploymentLog(deployment.id, `Stopping and removing old container ${containerName} if it exists...`);
-      await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => undefined);
+      appendDeploymentLog(
+        deployment.id,
+        `Stopping and removing old container ${containerName} if it exists...`,
+      );
+      await runCommand(
+        "docker",
+        ["rm", "-f", containerName],
+        deployment.id,
+      ).catch(() => undefined);
 
-      appendDeploymentLog(deployment.id, `Renaming new container ${tempContainerName} to stable name ${containerName}...`);
-      await runCommand("docker", ["rename", tempContainerName, containerName], deployment.id);
+      appendDeploymentLog(
+        deployment.id,
+        `Renaming new container ${tempContainerName} to stable name ${containerName}...`,
+      );
+      await runCommand(
+        "docker",
+        ["rename", tempContainerName, containerName],
+        deployment.id,
+      );
       webTempContainerPromoted = true;
       webTempContainerNeedsCleanup = false;
       webActivePortChanged = false;
 
       const deployedAt = now();
       supersedeRunningDeployments(service.id);
-      db.update(deployments).set({ status: "running", finishedAt: deployedAt }).where(eq(deployments.id, deployment.id)).run();
+      db.update(deployments)
+        .set({ status: "running", finishedAt: deployedAt })
+        .where(eq(deployments.id, deployment.id))
+        .run();
       db.update(services)
-        .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt, ...(isWorker ? { activePort: null } : {}) })
+        .set({
+          status: "active",
+          lastDeployedAt: deployedAt,
+          updatedAt: deployedAt,
+          ...(isWorker ? { activePort: null } : {}),
+        })
         .where(eq(services.id, service.id))
         .run();
 
-      appendDeploymentLog(deployment.id, `Docker image deployment successfully running at ${preferredServiceUrl(service)}.`);
+      appendDeploymentLog(
+        deployment.id,
+        `Docker image deployment successfully running at ${preferredServiceUrl(service)}.`,
+      );
     } catch (error) {
       if (error instanceof DeploymentAbortedError) {
         abortRequests.delete(deployment.id);
-        db.update(deployments).set({ status: "aborted", finishedAt: now() }).where(eq(deployments.id, deployment.id)).run();
+        db.update(deployments)
+          .set({ status: "aborted", finishedAt: now() })
+          .where(eq(deployments.id, deployment.id))
+          .run();
         db.update(services)
-          .set({ status: getLastLiveServiceStatus(service.id), updatedAt: now() })
+          .set({
+            status: getLastLiveServiceStatus(service.id),
+            updatedAt: now(),
+          })
           .where(eq(services.id, service.id))
           .run();
-        appendDeploymentLog(deployment.id, "Docker image deployment aborted.", "stderr", secrets);
+        appendDeploymentLog(
+          deployment.id,
+          "Docker image deployment aborted.",
+          "stderr",
+          secrets,
+        );
         await rollbackFailedWebRollout({
           deploymentId: deployment.id,
           serviceId: service.id,
           previousActivePort: webPreviousActivePort,
-          shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+          shouldRestoreActivePort:
+            webActivePortChanged && !webTempContainerPromoted,
           tempContainerName: webTempContainerName,
-          shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
-          secrets
+          shouldRemoveTempContainer:
+            webTempContainerNeedsCleanup && !webTempContainerPromoted,
+          secrets,
         });
         return;
       }
 
-      const message = error instanceof Error ? error.message : "Unknown Docker image deployment error";
-      appendDeploymentLog(deployment.id, `Docker image deployment failed: ${message}`, "stderr", secrets);
-      db.update(deployments).set({ status: "failed", finishedAt: now() }).where(eq(deployments.id, deployment.id)).run();
-      db.update(services).set({ status: "failed", updatedAt: now() }).where(eq(services.id, service.id)).run();
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unknown Docker image deployment error";
+      appendDeploymentLog(
+        deployment.id,
+        `Docker image deployment failed: ${message}`,
+        "stderr",
+        secrets,
+      );
+      db.update(deployments)
+        .set({ status: "failed", finishedAt: now() })
+        .where(eq(deployments.id, deployment.id))
+        .run();
+      db.update(services)
+        .set({ status: "failed", updatedAt: now() })
+        .where(eq(services.id, service.id))
+        .run();
       await rollbackFailedWebRollout({
         deploymentId: deployment.id,
         serviceId: service.id,
         previousActivePort: webPreviousActivePort,
-        shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+        shouldRestoreActivePort:
+          webActivePortChanged && !webTempContainerPromoted,
         tempContainerName: webTempContainerName,
-        shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
-        secrets
+        shouldRemoveTempContainer:
+          webTempContainerNeedsCleanup && !webTempContainerPromoted,
+        secrets,
       });
     }
     return;
@@ -1191,9 +1897,15 @@ async function runDeployment(deployment: Deployment, service: Service) {
     .set({ status: "building", startedAt, imageTag, containerName })
     .where(eq(deployments.id, deployment.id))
     .run();
-  db.update(services).set({ status: "building", updatedAt: now() }).where(eq(services.id, service.id)).run();
+  db.update(services)
+    .set({ status: "building", updatedAt: now() })
+    .where(eq(services.id, service.id))
+    .run();
 
-  appendDeploymentLog(deployment.id, `Preparing workspace for ${service.name}.`);
+  appendDeploymentLog(
+    deployment.id,
+    `Preparing workspace for ${service.name}.`,
+  );
   ensureDefaultDomainForService(service);
   let webTempContainerName: string | null = null;
   let webTempContainerNeedsCleanup = false;
@@ -1203,40 +1915,88 @@ async function runDeployment(deployment: Deployment, service: Service) {
 
   try {
     if (config.deployDryRun) {
-      appendDeploymentLog(deployment.id, isFunction ? "Dry-run mode is enabled. Skipping function source generation, Docker build, and Docker run." : "Dry-run mode is enabled. Skipping clone, Railpack build, and Docker run.");
+      appendDeploymentLog(
+        deployment.id,
+        isFunction
+          ? "Dry-run mode is enabled. Skipping function source generation, Docker build, and Docker run."
+          : "Dry-run mode is enabled. Skipping clone, Railpack build, and Docker run.",
+      );
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 800));
       const deployedAt = now();
       const isWorker = isWorkerService(service);
       supersedeRunningDeployments(service.id);
       db.update(deployments)
-        .set({ status: "running", finishedAt: deployedAt, imageTag, containerName })
+        .set({
+          status: "running",
+          finishedAt: deployedAt,
+          imageTag,
+          containerName,
+        })
         .where(eq(deployments.id, deployment.id))
         .run();
       db.update(services)
-        .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt })
+        .set({
+          status: "active",
+          lastDeployedAt: deployedAt,
+          updatedAt: deployedAt,
+        })
         .where(eq(services.id, service.id))
         .run();
       const caddy = await writeAndReloadCaddy();
-      appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config reloaded." : `Caddy reload skipped/failed: ${caddy.detail}`);
-      appendDeploymentLog(deployment.id, isWorker ? "Dry-run worker deployment marked running." : `Dry-run deployment marked running at ${preferredServiceUrl(service)}.`);
+      appendDeploymentLog(
+        deployment.id,
+        caddy.ok
+          ? "Caddy config reloaded."
+          : `Caddy reload skipped/failed: ${caddy.detail}`,
+      );
+      appendDeploymentLog(
+        deployment.id,
+        isWorker
+          ? "Dry-run worker deployment marked running."
+          : `Dry-run deployment marked running at ${preferredServiceUrl(service)}.`,
+      );
       return;
     }
 
     if (isFunction) {
-      const functionSource = writeFunctionDeploymentProject(service.id, sourceDir);
-      appendDeploymentLog(deployment.id, `Generated ${functionRuntimeLabel(functionSource.runtime)} function runtime project from saved source.`);
+      const functionSource = writeFunctionDeploymentProject(
+        service.id,
+        sourceDir,
+      );
+      appendDeploymentLog(
+        deployment.id,
+        `Generated ${functionRuntimeLabel(functionSource.runtime)} function runtime project from saved source.`,
+      );
     } else {
       const authToken = await cloneAuthTokenForService(service);
       if (authToken) {
         secrets.push(authToken);
       }
       const cloneUrl = cloneUrlWithToken(service.repoUrl, authToken);
-      await runCommand("git", ["clone", "--depth", "1", "--branch", service.branch, cloneUrl, sourceDir], deployment.id, {
-        redact: secrets
-      });
+      await runCommand(
+        "git",
+        [
+          "clone",
+          "--depth",
+          "1",
+          "--branch",
+          service.branch,
+          cloneUrl,
+          sourceDir,
+        ],
+        deployment.id,
+        {
+          redact: secrets,
+        },
+      );
 
       if (deployment.commitSha) {
-        await runCommand("git", ["checkout", deployment.commitSha], deployment.id, { cwd: sourceDir });
+        await runCommand(
+          "git",
+          ["checkout", deployment.commitSha],
+          deployment.id,
+          { cwd: sourceDir },
+        );
       }
     }
 
@@ -1249,29 +2009,43 @@ async function runDeployment(deployment: Deployment, service: Service) {
       appendDeploymentLog(deployment.id, warning, "system", secrets);
     }
     if (service.detectedBuildMethod !== dockerfileDetection.method) {
-      db.update(services).set({ detectedBuildMethod: dockerfileDetection.method }).where(eq(services.id, service.id)).run();
+      db.update(services)
+        .set({ detectedBuildMethod: dockerfileDetection.method })
+        .where(eq(services.id, service.id))
+        .run();
     }
 
-    if (dockerfileDetection.method === "dockerfile" && dockerfileDetection.dockerfilePath) {
-      appendDeploymentLog(deployment.id, `Found ${dockerfileDetection.dockerfileRelativePath} — building with docker build and bypassing Railpack.`);
+    if (
+      dockerfileDetection.method === "dockerfile" &&
+      dockerfileDetection.dockerfilePath
+    ) {
+      appendDeploymentLog(
+        deployment.id,
+        `Found ${dockerfileDetection.dockerfileRelativePath} — building with docker build and bypassing Railpack.`,
+      );
       const ignoredOverrides = [
         service.installCommand ? "install" : "",
         service.prebuildCommand ? "prebuild" : "",
         service.buildCommand ? "build" : "",
-        service.startCommand ? "start" : ""
+        service.startCommand ? "start" : "",
       ].filter(Boolean);
       if (ignoredOverrides.length > 0) {
         appendDeploymentLog(
           deployment.id,
-          `Custom ${ignoredOverrides.join("/")} command settings are ignored for Dockerfile builds; the Dockerfile controls how the image is built and started.`
+          `Custom ${ignoredOverrides.join("/")} command settings are ignored for Dockerfile builds; the Dockerfile controls how the image is built and started.`,
         );
       }
       await ensureDockerAvailable(deployment.id);
       await runCommand(
         "docker",
-        dockerBuildArgs(imageTag, dockerfileDetection.dockerfilePath, buildEnv, appDir),
+        dockerBuildArgs(
+          imageTag,
+          dockerfileDetection.dockerfilePath,
+          buildEnv,
+          appDir,
+        ),
         deployment.id,
-        { env: { DOCKER_BUILDKIT: "0" }, redact: secrets }
+        { env: { DOCKER_BUILDKIT: "0" }, redact: secrets },
       );
     } else {
       const savedInstallCommand = service.installCommand ?? "";
@@ -1282,15 +2056,27 @@ async function runDeployment(deployment: Deployment, service: Service) {
         appDir,
         serviceStartCommand: startCommand,
         isStaticService,
-        isWorker
+        isWorker,
       });
       if (tanStackStartRuntime) {
         startCommand = tanStackStartRuntime.startCommand;
-        appendDeploymentLog(deployment.id, tanStackStartRuntime.message, "system", secrets);
+        appendDeploymentLog(
+          deployment.id,
+          tanStackStartRuntime.message,
+          "system",
+          secrets,
+        );
       }
-      const packageManager = detectPackageManager(sourceDir, [savedInstallCommand, prebuildCommand, buildCommand, startCommand]);
+      const packageManager = detectPackageManager(sourceDir, [
+        savedInstallCommand,
+        prebuildCommand,
+        buildCommand,
+        startCommand,
+      ]);
       const installCommand = savedInstallCommand;
-      const hasCommandOverrides = Boolean(installCommand || prebuildCommand || buildCommand || startCommand);
+      const hasCommandOverrides = Boolean(
+        installCommand || prebuildCommand || buildCommand || startCommand,
+      );
       const looksLikeBunProject = packageManager === "bun";
 
       const railpackEnv: Record<string, string> = {
@@ -1306,7 +2092,7 @@ async function runDeployment(deployment: Deployment, service: Service) {
         RAILPACK_INSTALL_CMD: installCommand,
         RAILPACK_INSTALL_COMMAND: installCommand,
         RAILPACK_PACKAGES: looksLikeBunProject ? "bun@latest" : "",
-        FORCE_COLOR: "1"
+        FORCE_COLOR: "1",
       };
 
       Object.keys(railpackEnv).forEach((key) => {
@@ -1316,33 +2102,69 @@ async function runDeployment(deployment: Deployment, service: Service) {
       });
 
       if (savedInstallCommand) {
-        appendDeploymentLog(deployment.id, `Using custom install command: ${installCommand}`, "system", secrets);
+        appendDeploymentLog(
+          deployment.id,
+          `Using custom install command: ${installCommand}`,
+          "system",
+          secrets,
+        );
       }
       if (prebuildCommand) {
-        appendDeploymentLog(deployment.id, `Using custom prebuild command: ${prebuildCommand}`, "system", secrets);
+        appendDeploymentLog(
+          deployment.id,
+          `Using custom prebuild command: ${prebuildCommand}`,
+          "system",
+          secrets,
+        );
       }
       if (buildCommand) {
-        appendDeploymentLog(deployment.id, `Using custom build command: ${buildCommand}`, "system", secrets);
+        appendDeploymentLog(
+          deployment.id,
+          `Using custom build command: ${buildCommand}`,
+          "system",
+          secrets,
+        );
       }
       if (startCommand) {
-        appendDeploymentLog(deployment.id, `${tanStackStartRuntime ? "Using automatic" : "Using custom"} start command: ${startCommand}`, "system", secrets);
+        appendDeploymentLog(
+          deployment.id,
+          `${tanStackStartRuntime ? "Using automatic" : "Using custom"} start command: ${startCommand}`,
+          "system",
+          secrets,
+        );
       }
 
       if (hasCommandOverrides) {
-        appendDeploymentLog(deployment.id, "Applying command overrides through Railpack.");
+        appendDeploymentLog(
+          deployment.id,
+          "Applying command overrides through Railpack.",
+        );
       }
       await ensureBuildkitAvailable(deployment.id);
-      const railpackArgs = ["build", "--name", imageTag, "--progress", "plain", "--cache-key", service.id];
+      const railpackArgs = [
+        "build",
+        "--name",
+        imageTag,
+        "--progress",
+        "plain",
+        "--cache-key",
+        service.id,
+      ];
       railpackArgs.push(...railpackBuildEnvArgs(buildEnv));
       const railpackConfigFile = prebuildCommand
         ? writeRailpackPrebuildConfig({
-          appDir,
-          configuredConfigFile: railpackEnv.RAILPACK_CONFIG_FILE ?? null,
-          prebuildCommand
-        })
+            appDir,
+            configuredConfigFile: railpackEnv.RAILPACK_CONFIG_FILE ?? null,
+            prebuildCommand,
+          })
         : railpackEnv.RAILPACK_CONFIG_FILE;
       if (railpackConfigFile) {
-        appendDeploymentLog(deployment.id, `Using Railpack config file: ${railpackConfigFile}`, "system", secrets);
+        appendDeploymentLog(
+          deployment.id,
+          `Using Railpack config file: ${railpackConfigFile}`,
+          "system",
+          secrets,
+        );
         railpackArgs.push("--config-file", railpackConfigFile);
       }
       if (buildCommand) {
@@ -1352,32 +2174,52 @@ async function runDeployment(deployment: Deployment, service: Service) {
         railpackArgs.push("--start-cmd", startCommand);
       }
       railpackArgs.push(appDir);
-      await runCommand(
-        "railpack",
-        railpackArgs,
-        deployment.id,
-        { env: railpackEnv, redact: secrets }
-      );
+      await runCommand("railpack", railpackArgs, deployment.id, {
+        env: railpackEnv,
+        redact: secrets,
+      });
     }
 
     if (isStaticService) {
-      await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => {
-        appendDeploymentLog(deployment.id, `No previous container named ${containerName} was running.`);
+      await runCommand(
+        "docker",
+        ["rm", "-f", containerName],
+        deployment.id,
+      ).catch(() => {
+        appendDeploymentLog(
+          deployment.id,
+          `No previous container named ${containerName} was running.`,
+        );
       });
 
       await exportStaticSiteFromImage(deployment, service, imageTag, false);
 
       const deployedAt = now();
       supersedeRunningDeployments(service.id);
-      db.update(deployments).set({ status: "running", finishedAt: deployedAt }).where(eq(deployments.id, deployment.id)).run();
+      db.update(deployments)
+        .set({ status: "running", finishedAt: deployedAt })
+        .where(eq(deployments.id, deployment.id))
+        .run();
       db.update(services)
-        .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt })
+        .set({
+          status: "active",
+          lastDeployedAt: deployedAt,
+          updatedAt: deployedAt,
+        })
         .where(eq(services.id, service.id))
         .run();
 
       const caddy = await writeAndReloadCaddy();
-      appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config reloaded." : `Caddy reload skipped/failed: ${caddy.detail}`);
-      appendDeploymentLog(deployment.id, `Static site is served at ${preferredServiceUrl(service)}.`);
+      appendDeploymentLog(
+        deployment.id,
+        caddy.ok
+          ? "Caddy config reloaded."
+          : `Caddy reload skipped/failed: ${caddy.detail}`,
+      );
+      appendDeploymentLog(
+        deployment.id,
+        `Static site is served at ${preferredServiceUrl(service)}.`,
+      );
       return;
     }
 
@@ -1387,11 +2229,18 @@ async function runDeployment(deployment: Deployment, service: Service) {
         containerNameForService,
         runDocker: (args) => runCommand("docker", args, deployment.id),
         runBufferedDocker: (args) => runBufferedCommand("docker", args),
-        log: (line) => appendDeploymentLog(deployment.id, line)
+        log: (line) => appendDeploymentLog(deployment.id, line),
       });
 
-      appendDeploymentLog(deployment.id, `Stopping and removing old worker container ${containerName} if it exists...`);
-      await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => undefined);
+      appendDeploymentLog(
+        deployment.id,
+        `Stopping and removing old worker container ${containerName} if it exists...`,
+      );
+      await runCommand(
+        "docker",
+        ["rm", "-f", containerName],
+        deployment.id,
+      ).catch(() => undefined);
 
       const dockerArgs = [
         "run",
@@ -1400,42 +2249,80 @@ async function runDeployment(deployment: Deployment, service: Service) {
         "unless-stopped",
         "--name",
         containerName,
-        ...runtimeNetworkArgs(service)
+        ...runtimeNetworkArgs(service),
       ];
       for (const [key, value] of Object.entries(env)) {
         dockerArgs.push("--env", `${key}=${value}`);
       }
       dockerArgs.push(imageTag);
 
-      appendDeploymentLog(deployment.id, `Starting worker container ${containerName} without a published port...`);
-      await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
+      appendDeploymentLog(
+        deployment.id,
+        `Starting worker container ${containerName} without a published port...`,
+      );
+      await runCommand("docker", dockerArgs, deployment.id, {
+        redact: secrets,
+      });
 
       appendDeploymentLog(deployment.id, "Checking worker process startup...");
       try {
         await probeWorkerStartup(containerName);
-        appendDeploymentLog(deployment.id, "Worker process stayed running. Container is healthy.");
+        appendDeploymentLog(
+          deployment.id,
+          "Worker process stayed running. Container is healthy.",
+        );
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        appendDeploymentLog(deployment.id, `Worker startup check failed: ${errMsg}.`, "stderr");
+        appendDeploymentLog(
+          deployment.id,
+          `Worker startup check failed: ${errMsg}.`,
+          "stderr",
+        );
         await appendContainerLogs(containerName, deployment.id, secrets);
-        appendDeploymentLog(deployment.id, "Cleaning up failed worker container...", "stderr");
-        await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => {});
+        appendDeploymentLog(
+          deployment.id,
+          "Cleaning up failed worker container...",
+          "stderr",
+        );
+        await runCommand(
+          "docker",
+          ["rm", "-f", containerName],
+          deployment.id,
+        ).catch(() => {});
         throw new Error(`Worker startup failed: ${errMsg}`);
       }
 
-      db.update(services).set({ activePort: null }).where(eq(services.id, service.id)).run();
+      db.update(services)
+        .set({ activePort: null })
+        .where(eq(services.id, service.id))
+        .run();
       const caddy = await writeAndReloadCaddy();
-      appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config reloaded." : `Caddy reload skipped/failed: ${caddy.detail}`);
+      appendDeploymentLog(
+        deployment.id,
+        caddy.ok
+          ? "Caddy config reloaded."
+          : `Caddy reload skipped/failed: ${caddy.detail}`,
+      );
 
       const deployedAt = now();
       supersedeRunningDeployments(service.id);
-      db.update(deployments).set({ status: "running", finishedAt: deployedAt }).where(eq(deployments.id, deployment.id)).run();
+      db.update(deployments)
+        .set({ status: "running", finishedAt: deployedAt })
+        .where(eq(deployments.id, deployment.id))
+        .run();
       db.update(services)
-        .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt })
+        .set({
+          status: "active",
+          lastDeployedAt: deployedAt,
+          updatedAt: deployedAt,
+        })
         .where(eq(services.id, service.id))
         .run();
 
-      appendDeploymentLog(deployment.id, "Worker deployment successfully running.");
+      appendDeploymentLog(
+        deployment.id,
+        "Worker deployment successfully running.",
+      );
       return;
     }
 
@@ -1445,12 +2332,15 @@ async function runDeployment(deployment: Deployment, service: Service) {
       containerNameForService,
       runDocker: (args) => runCommand("docker", args, deployment.id),
       runBufferedDocker: (args) => runBufferedCommand("docker", args),
-      log: (line) => appendDeploymentLog(deployment.id, line)
+      log: (line) => appendDeploymentLog(deployment.id, line),
     });
     const tempPort = await getEphemeralFreePort();
     const tempContainerName = `${containerName}-${deployment.id}`;
     webTempContainerName = tempContainerName;
-    appendDeploymentLog(deployment.id, `Allocated ephemeral port ${tempPort} for zero-downtime container rollout.`);
+    appendDeploymentLog(
+      deployment.id,
+      `Allocated ephemeral port ${tempPort} for zero-downtime container rollout.`,
+    );
 
     const dockerArgs = [
       "run",
@@ -1461,29 +2351,58 @@ async function runDeployment(deployment: Deployment, service: Service) {
       tempContainerName,
       ...runtimeNetworkArgs(service),
       "-p",
-      `127.0.0.1:${tempPort}:${runtimePort}`
+      `127.0.0.1:${tempPort}:${runtimePort}`,
     ];
-    for (const [key, value] of Object.entries({ ...env, PORT: String(runtimePort) })) {
+    for (const [key, value] of Object.entries({
+      ...env,
+      PORT: String(runtimePort),
+    })) {
       dockerArgs.push("--env", `${key}=${value}`);
     }
     dockerArgs.push(imageTag);
 
-    appendDeploymentLog(deployment.id, `Starting new container ${tempContainerName} mapping 127.0.0.1:${tempPort} to internal ${runtimePort}...`);
+    appendDeploymentLog(
+      deployment.id,
+      `Starting new container ${tempContainerName} mapping 127.0.0.1:${tempPort} to internal ${runtimePort}...`,
+    );
     webTempContainerNeedsCleanup = true;
     await runCommand("docker", dockerArgs, deployment.id, { redact: secrets });
 
-    appendDeploymentLog(deployment.id, `Probing port ${tempPort} for startup TCP health check...`);
+    appendDeploymentLog(
+      deployment.id,
+      `Probing port ${tempPort} for startup TCP health check...`,
+    );
     try {
       await probeContainerStartup(tempPort, tempContainerName);
-      appendDeploymentLog(deployment.id, `Startup TCP probe succeeded. Container is healthy.`);
+      appendDeploymentLog(
+        deployment.id,
+        `Startup TCP probe succeeded. Container is healthy.`,
+      );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      appendDeploymentLog(deployment.id, `Startup health check failed: ${errMsg}.`, "stderr");
-      const startupLogs = await appendContainerLogs(tempContainerName, deployment.id, secrets);
+      appendDeploymentLog(
+        deployment.id,
+        `Startup health check failed: ${errMsg}.`,
+        "stderr",
+      );
+      const startupLogs = await appendContainerLogs(
+        tempContainerName,
+        deployment.id,
+        secrets,
+      );
       if (errMsg.includes("timed out")) {
-        appendContainerPortHint(deployment.id, startupLogs, runtimePort, secrets);
+        appendContainerPortHint(
+          deployment.id,
+          startupLogs,
+          runtimePort,
+          secrets,
+        );
       }
-      appendDeploymentLog(deployment.id, "Cleaning up temporary container...", "stderr");
+      appendDeploymentLog(
+        deployment.id,
+        "Cleaning up temporary container...",
+        "stderr",
+      );
       await runCommand("docker", ["rm", "-f", tempContainerName], deployment.id)
         .then(() => {
           webTempContainerNeedsCleanup = false;
@@ -1493,70 +2412,135 @@ async function runDeployment(deployment: Deployment, service: Service) {
     }
 
     // Update active port in database to route incoming requests to tempPort
-    webPreviousActivePort = currentActivePortForService(service.id, service.activePort);
-    db.update(services).set({ activePort: tempPort }).where(eq(services.id, service.id)).run();
+    webPreviousActivePort = currentActivePortForService(
+      service.id,
+      service.activePort,
+    );
+    db.update(services)
+      .set({ activePort: tempPort })
+      .where(eq(services.id, service.id))
+      .run();
     webActivePortChanged = true;
 
-    appendDeploymentLog(deployment.id, "Hot-swapping traffic by reloading Caddy configuration...");
+    appendDeploymentLog(
+      deployment.id,
+      "Hot-swapping traffic by reloading Caddy configuration...",
+    );
     const caddy = await writeAndReloadCaddy();
-    appendDeploymentLog(deployment.id, caddy.ok ? "Caddy config hot-reloaded successfully." : `Caddy reload failed: ${caddy.detail}`);
+    appendDeploymentLog(
+      deployment.id,
+      caddy.ok
+        ? "Caddy config hot-reloaded successfully."
+        : `Caddy reload failed: ${caddy.detail}`,
+    );
 
-    appendDeploymentLog(deployment.id, "Waiting 300ms for active connections to drain gracefully...");
+    appendDeploymentLog(
+      deployment.id,
+      "Waiting 300ms for active connections to drain gracefully...",
+    );
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 300));
 
-    appendDeploymentLog(deployment.id, `Stopping and removing old container ${containerName} if it exists...`);
-    await runCommand("docker", ["rm", "-f", containerName], deployment.id).catch(() => {
+    appendDeploymentLog(
+      deployment.id,
+      `Stopping and removing old container ${containerName} if it exists...`,
+    );
+    await runCommand(
+      "docker",
+      ["rm", "-f", containerName],
+      deployment.id,
+    ).catch(() => {
       // Ignore if no previous container was running
     });
 
-    appendDeploymentLog(deployment.id, `Renaming new container ${tempContainerName} to stable name ${containerName}...`);
-    await runCommand("docker", ["rename", tempContainerName, containerName], deployment.id);
+    appendDeploymentLog(
+      deployment.id,
+      `Renaming new container ${tempContainerName} to stable name ${containerName}...`,
+    );
+    await runCommand(
+      "docker",
+      ["rename", tempContainerName, containerName],
+      deployment.id,
+    );
     webTempContainerPromoted = true;
     webTempContainerNeedsCleanup = false;
     webActivePortChanged = false;
 
     const deployedAt = now();
     supersedeRunningDeployments(service.id);
-    db.update(deployments).set({ status: "running", finishedAt: deployedAt }).where(eq(deployments.id, deployment.id)).run();
+    db.update(deployments)
+      .set({ status: "running", finishedAt: deployedAt })
+      .where(eq(deployments.id, deployment.id))
+      .run();
     db.update(services)
-      .set({ status: "active", lastDeployedAt: deployedAt, updatedAt: deployedAt })
+      .set({
+        status: "active",
+        lastDeployedAt: deployedAt,
+        updatedAt: deployedAt,
+      })
       .where(eq(services.id, service.id))
       .run();
 
-    appendDeploymentLog(deployment.id, `Deployment successfully running at ${preferredServiceUrl(service)}.`);
+    appendDeploymentLog(
+      deployment.id,
+      `Deployment successfully running at ${preferredServiceUrl(service)}.`,
+    );
   } catch (error) {
     if (error instanceof DeploymentAbortedError) {
       abortRequests.delete(deployment.id);
-      db.update(deployments).set({ status: "aborted", finishedAt: now() }).where(eq(deployments.id, deployment.id)).run();
+      db.update(deployments)
+        .set({ status: "aborted", finishedAt: now() })
+        .where(eq(deployments.id, deployment.id))
+        .run();
       db.update(services)
         .set({ status: getLastLiveServiceStatus(service.id), updatedAt: now() })
         .where(eq(services.id, service.id))
         .run();
-      appendDeploymentLog(deployment.id, "Deployment aborted.", "stderr", secrets);
+      appendDeploymentLog(
+        deployment.id,
+        "Deployment aborted.",
+        "stderr",
+        secrets,
+      );
       await rollbackFailedWebRollout({
         deploymentId: deployment.id,
         serviceId: service.id,
         previousActivePort: webPreviousActivePort,
-        shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+        shouldRestoreActivePort:
+          webActivePortChanged && !webTempContainerPromoted,
         tempContainerName: webTempContainerName,
-        shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
-        secrets
+        shouldRemoveTempContainer:
+          webTempContainerNeedsCleanup && !webTempContainerPromoted,
+        secrets,
       });
       return;
     }
 
-    const message = error instanceof Error ? error.message : "Unknown deployment error";
-    appendDeploymentLog(deployment.id, `Deployment failed: ${message}`, "stderr", secrets);
-    db.update(deployments).set({ status: "failed", finishedAt: now() }).where(eq(deployments.id, deployment.id)).run();
-    db.update(services).set({ status: "failed", updatedAt: now() }).where(eq(services.id, service.id)).run();
+    const message =
+      error instanceof Error ? error.message : "Unknown deployment error";
+    appendDeploymentLog(
+      deployment.id,
+      `Deployment failed: ${message}`,
+      "stderr",
+      secrets,
+    );
+    db.update(deployments)
+      .set({ status: "failed", finishedAt: now() })
+      .where(eq(deployments.id, deployment.id))
+      .run();
+    db.update(services)
+      .set({ status: "failed", updatedAt: now() })
+      .where(eq(services.id, service.id))
+      .run();
     await rollbackFailedWebRollout({
       deploymentId: deployment.id,
       serviceId: service.id,
       previousActivePort: webPreviousActivePort,
-      shouldRestoreActivePort: webActivePortChanged && !webTempContainerPromoted,
+      shouldRestoreActivePort:
+        webActivePortChanged && !webTempContainerPromoted,
       tempContainerName: webTempContainerName,
-      shouldRemoveTempContainer: webTempContainerNeedsCleanup && !webTempContainerPromoted,
-      secrets
+      shouldRemoveTempContainer:
+        webTempContainerNeedsCleanup && !webTempContainerPromoted,
+      secrets,
     });
   } finally {
     abortRequests.delete(deployment.id);
@@ -1596,12 +2580,23 @@ async function tickWorker() {
   for (const queued of queuedDeployments) {
     if (started >= availableSlots) break;
     if (activeDeployments.has(queued.id)) continue;
-    if (activeDeploymentServices.has(queued.serviceId) || selectedServices.has(queued.serviceId)) continue;
+    if (
+      activeDeploymentServices.has(queued.serviceId) ||
+      selectedServices.has(queued.serviceId)
+    )
+      continue;
 
     const service = getServiceById(queued.serviceId);
     if (!service) {
-      db.update(deployments).set({ status: "failed", finishedAt: now() }).where(eq(deployments.id, queued.id)).run();
-      appendDeploymentLog(queued.id, "Deployment failed: service no longer exists.", "stderr");
+      db.update(deployments)
+        .set({ status: "failed", finishedAt: now() })
+        .where(eq(deployments.id, queued.id))
+        .run();
+      appendDeploymentLog(
+        queued.id,
+        "Deployment failed: service no longer exists.",
+        "stderr",
+      );
       continue;
     }
 
@@ -1619,14 +2614,22 @@ export function startDeployWorker() {
   workerStarted = true;
   normalizeRunningDeployments();
   const interruptedDeployments = db
-    .select({ id: deployments.id, serviceId: deployments.serviceId, containerName: deployments.containerName })
+    .select({
+      id: deployments.id,
+      serviceId: deployments.serviceId,
+      containerName: deployments.containerName,
+    })
     .from(deployments)
     .where(eq(deployments.status, "building"))
     .all();
   sqlite
-    .prepare("UPDATE deployments SET status = 'failed', finished_at = ? WHERE status IN ('building')")
+    .prepare(
+      "UPDATE deployments SET status = 'failed', finished_at = ? WHERE status IN ('building')",
+    )
     .run(now());
-  for (const serviceId of new Set(interruptedDeployments.map((deployment) => deployment.serviceId))) {
+  for (const serviceId of new Set(
+    interruptedDeployments.map((deployment) => deployment.serviceId),
+  )) {
     db.update(services)
       .set({ status: getLastLiveServiceStatus(serviceId), updatedAt: now() })
       .where(eq(services.id, serviceId))

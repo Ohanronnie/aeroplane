@@ -99,6 +99,13 @@ CREATE TABLE IF NOT EXISTS domains (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS compose_stacks (
+  service_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  manifest_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS database_backups (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -213,7 +220,9 @@ CREATE TABLE IF NOT EXISTS api_key_project_scopes (
 `);
 
 function hasColumn(table: string, column: string) {
-  const rows = sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  const rows = sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
   return rows.some((row) => row.name === column);
 }
 
@@ -242,7 +251,9 @@ if (!hasColumn("projects", "active_port")) {
 }
 
 if (!hasColumn("projects", "runtime_mode")) {
-  sqlite.exec("ALTER TABLE projects ADD COLUMN runtime_mode TEXT NOT NULL DEFAULT 'web'");
+  sqlite.exec(
+    "ALTER TABLE projects ADD COLUMN runtime_mode TEXT NOT NULL DEFAULT 'web'",
+  );
 }
 
 if (!hasColumn("projects", "prebuild_command")) {
@@ -250,7 +261,9 @@ if (!hasColumn("projects", "prebuild_command")) {
 }
 
 if (!hasColumn("projects", "database_public_enabled")) {
-  sqlite.exec("ALTER TABLE projects ADD COLUMN database_public_enabled INTEGER NOT NULL DEFAULT 0");
+  sqlite.exec(
+    "ALTER TABLE projects ADD COLUMN database_public_enabled INTEGER NOT NULL DEFAULT 0",
+  );
 }
 
 if (!hasColumn("projects", "database_public_hostname")) {
@@ -258,11 +271,15 @@ if (!hasColumn("projects", "database_public_hostname")) {
 }
 
 if (!hasColumn("projects", "postgres_logical_replication_enabled")) {
-  sqlite.exec("ALTER TABLE projects ADD COLUMN postgres_logical_replication_enabled INTEGER NOT NULL DEFAULT 0");
+  sqlite.exec(
+    "ALTER TABLE projects ADD COLUMN postgres_logical_replication_enabled INTEGER NOT NULL DEFAULT 0",
+  );
 }
 
 if (!hasColumn("projects", "build_method")) {
-  sqlite.exec("ALTER TABLE projects ADD COLUMN build_method TEXT NOT NULL DEFAULT 'auto'");
+  sqlite.exec(
+    "ALTER TABLE projects ADD COLUMN build_method TEXT NOT NULL DEFAULT 'auto'",
+  );
 }
 
 if (!hasColumn("projects", "dockerfile_path")) {
@@ -274,22 +291,36 @@ if (!hasColumn("projects", "detected_build_method")) {
 }
 
 if (!hasColumn("database_backups", "trigger")) {
-  sqlite.exec("ALTER TABLE database_backups ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'");
+  sqlite.exec(
+    "ALTER TABLE database_backups ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual'",
+  );
 }
 
 if (!hasColumn("database_backup_settings", "daily_enabled")) {
-  sqlite.exec("ALTER TABLE database_backup_settings ADD COLUMN daily_enabled INTEGER NOT NULL DEFAULT 0");
-  sqlite.exec("UPDATE database_backup_settings SET daily_enabled = automatic_enabled WHERE automatic_enabled = 1");
+  sqlite.exec(
+    "ALTER TABLE database_backup_settings ADD COLUMN daily_enabled INTEGER NOT NULL DEFAULT 0",
+  );
+  sqlite.exec(
+    "UPDATE database_backup_settings SET daily_enabled = automatic_enabled WHERE automatic_enabled = 1",
+  );
 }
 
 if (!hasColumn("database_backup_settings", "weekly_enabled")) {
-  sqlite.exec("ALTER TABLE database_backup_settings ADD COLUMN weekly_enabled INTEGER NOT NULL DEFAULT 0");
-  sqlite.exec("UPDATE database_backup_settings SET weekly_enabled = automatic_enabled WHERE automatic_enabled = 1");
+  sqlite.exec(
+    "ALTER TABLE database_backup_settings ADD COLUMN weekly_enabled INTEGER NOT NULL DEFAULT 0",
+  );
+  sqlite.exec(
+    "UPDATE database_backup_settings SET weekly_enabled = automatic_enabled WHERE automatic_enabled = 1",
+  );
 }
 
 if (!hasColumn("database_backup_settings", "monthly_enabled")) {
-  sqlite.exec("ALTER TABLE database_backup_settings ADD COLUMN monthly_enabled INTEGER NOT NULL DEFAULT 0");
-  sqlite.exec("UPDATE database_backup_settings SET monthly_enabled = automatic_enabled WHERE automatic_enabled = 1");
+  sqlite.exec(
+    "ALTER TABLE database_backup_settings ADD COLUMN monthly_enabled INTEGER NOT NULL DEFAULT 0",
+  );
+  sqlite.exec(
+    "UPDATE database_backup_settings SET monthly_enabled = automatic_enabled WHERE automatic_enabled = 1",
+  );
 }
 
 sqlite.exec(`
@@ -316,24 +347,36 @@ CREATE INDEX IF NOT EXISTS idx_api_key_project_scopes_project ON api_key_project
 `);
 
 function defaultProjectOwnerId() {
-  const owner = sqlite.prepare("SELECT id FROM users WHERE role = 'owner' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+  const owner = sqlite
+    .prepare(
+      "SELECT id FROM users WHERE role = 'owner' ORDER BY created_at ASC LIMIT 1",
+    )
+    .get() as { id: string } | undefined;
   if (owner?.id) return owner.id;
-  const firstUser = sqlite.prepare("SELECT id FROM users ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+  const firstUser = sqlite
+    .prepare("SELECT id FROM users ORDER BY created_at ASC LIMIT 1")
+    .get() as { id: string } | undefined;
   return firstUser?.id ?? null;
 }
 
 const legacyProjectOwnerId = defaultProjectOwnerId();
 if (legacyProjectOwnerId) {
   sqlite
-    .prepare("UPDATE project_groups SET owner_user_id = ? WHERE owner_user_id IS NULL OR owner_user_id = ''")
+    .prepare(
+      "UPDATE project_groups SET owner_user_id = ? WHERE owner_user_id IS NULL OR owner_user_id = ''",
+    )
     .run(legacyProjectOwnerId);
 }
 
-const projectGroupSlugRows = sqlite.prepare("SELECT slug FROM project_groups").all() as Array<{ slug: string }>;
+const projectGroupSlugRows = sqlite
+  .prepare("SELECT slug FROM project_groups")
+  .all() as Array<{ slug: string }>;
 const projectGroupSlugs = new Set(projectGroupSlugRows.map((row) => row.slug));
 
 const serviceRows = sqlite
-  .prepare("SELECT id, name, repo_url, repo_full_name, project_group_id, slug, created_at, updated_at FROM projects")
+  .prepare(
+    "SELECT id, name, repo_url, repo_full_name, project_group_id, slug, created_at, updated_at FROM projects",
+  )
   .all() as Array<{
   id: string;
   name: string;
@@ -353,8 +396,18 @@ for (const service of serviceRows) {
     const groupId = nanoid(10);
     const groupSlug = createUniqueSlug(service.name, projectGroupSlugs);
     sqlite
-      .prepare("INSERT INTO project_groups (id, owner_user_id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(groupId, legacyProjectOwnerId, service.name, groupSlug, null, service.created_at, service.updated_at);
+      .prepare(
+        "INSERT INTO project_groups (id, owner_user_id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        groupId,
+        legacyProjectOwnerId,
+        service.name,
+        groupSlug,
+        null,
+        service.created_at,
+        service.updated_at,
+      );
     projectGroupId = groupId;
   }
 
@@ -370,7 +423,9 @@ for (const service of serviceRows) {
       .replace(/\.git$/, "");
 
   sqlite
-    .prepare("UPDATE projects SET project_group_id = ?, slug = ?, repo_full_name = COALESCE(repo_full_name, ?) WHERE id = ?")
+    .prepare(
+      "UPDATE projects SET project_group_id = ?, slug = ?, repo_full_name = COALESCE(repo_full_name, ?) WHERE id = ?",
+    )
     .run(projectGroupId, serviceSlug, repoFullName, service.id);
 }
 

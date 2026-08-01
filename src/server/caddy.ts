@@ -11,9 +11,14 @@ import { ensureDefaultDomainsForExistingServices } from "./service-domains.js";
 import { configuredControlPlaneHostname } from "./system-settings.js";
 import { isDatabaseService } from "../shared/service-source.js";
 import { isWorkerService } from "../shared/service-runtime.js";
+import { composeRoutesForService, getComposeStack } from "./compose-stack.js";
 
 function shellWords(command: string) {
-  return command.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, "")) ?? [];
+  return (
+    command
+      .match(/(?:[^\s"]+|"[^"]*")+/g)
+      ?.map((part) => part.replace(/^"|"$/g, "")) ?? []
+  );
 }
 
 function isLocalHostname(hostname: string) {
@@ -25,7 +30,11 @@ function caddyTlsConfig(hostname: string) {
 }
 
 function staticSiteDirForService(serviceId: string) {
-  return resolve(process.env.CADDY_DATA_DIR ?? config.caddyDataDir, "static-sites", serviceId);
+  return resolve(
+    process.env.CADDY_DATA_DIR ?? config.caddyDataDir,
+    "static-sites",
+    serviceId,
+  );
 }
 
 function currentControlPlaneHostname() {
@@ -42,11 +51,18 @@ function currentCaddyReloadCmd() {
 
 function caddyReloadDetail(output: string, code: number | null) {
   const trimmed = output.trim();
-  if (/localhost:2019\/load|dial tcp .*:2019: connect: connection refused/i.test(trimmed)) {
+  if (
+    /localhost:2019\/load|dial tcp .*:2019: connect: connection refused/i.test(
+      trimmed,
+    )
+  ) {
     return "Caddy config was written, but Caddy's admin API is not reachable. Start Caddy or set CADDY_RELOAD_CMD to the reload command for your running Caddy instance.";
   }
 
-  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index];
     if (line && /^error:/i.test(line)) return line;
@@ -66,7 +82,10 @@ ${caddyTlsConfig(hostname)}  encode zstd gzip
 
 export function renderCaddyfile() {
   ensureDefaultDomainsForExistingServices();
-  const routableService = or(inArray(services.status, ["active", "building"]), isNotNull(services.activePort));
+  const routableService = or(
+    inArray(services.status, ["active", "building"]),
+    isNotNull(services.activePort),
+  );
   const domainMappings = db
     .select({
       serviceId: services.id,
@@ -76,7 +95,7 @@ export function renderCaddyfile() {
       staticOutput: services.staticOutput,
       runtimeMode: services.runtimeMode,
       repoUrl: services.repoUrl,
-      repoFullName: services.repoFullName
+      repoFullName: services.repoFullName,
     })
     .from(domains)
     .innerJoin(services, eq(services.id, domains.serviceId))
@@ -87,10 +106,15 @@ export function renderCaddyfile() {
       hostname: services.databasePublicHostname,
       hostPort: services.hostPort,
       repoUrl: services.repoUrl,
-      repoFullName: services.repoFullName
+      repoFullName: services.repoFullName,
     })
     .from(services)
-    .where(and(eq(services.databasePublicEnabled, true), isNotNull(services.databasePublicHostname)))
+    .where(
+      and(
+        eq(services.databasePublicEnabled, true),
+        isNotNull(services.databasePublicHostname),
+      ),
+    )
     .all();
 
   const blocks: string[] = [];
@@ -110,24 +134,48 @@ export function renderCaddyfile() {
 
   for (const row of domainMappings) {
     const isDatabase = isDatabaseService(row);
-    if (isDatabase) continue;
+    if (isDatabase || getComposeStack(row.serviceId)) continue;
     if (isWorkerService(row)) continue;
     if (controlPlaneHostname && row.hostname === controlPlaneHostname) continue;
 
     if (row.staticOutput) {
-      addHostnameBlock(row.hostname, `${row.hostname} {
+      addHostnameBlock(
+        row.hostname,
+        `${row.hostname} {
 ${caddyTlsConfig(row.hostname)}  root * ${staticSiteDirForService(row.serviceId)}
   try_files {path} {path}/ /index.html
   file_server
-}`);
+}`,
+      );
       continue;
     }
 
     const targetPort = row.activePort ?? row.hostPort;
-    addHostnameBlock(row.hostname, `${row.hostname} {
+    addHostnameBlock(
+      row.hostname,
+      `${row.hostname} {
 ${caddyTlsConfig(row.hostname)}  encode zstd gzip
   reverse_proxy 127.0.0.1:${targetPort}
-}`);
+}`,
+    );
+  }
+
+  for (const service of db
+    .select()
+    .from(services)
+    .where(inArray(services.status, ["active", "building"]))
+    .all()) {
+    for (const route of composeRoutesForService(service)) {
+      if (controlPlaneHostname && route.hostname === controlPlaneHostname)
+        continue;
+      addHostnameBlock(
+        route.hostname,
+        `${route.hostname} {
+${caddyTlsConfig(route.hostname)}  encode zstd gzip
+  reverse_proxy 127.0.0.1:${route.hostPort}
+}`,
+      );
+    }
   }
 
   for (const row of databaseMappings) {
@@ -137,9 +185,12 @@ ${caddyTlsConfig(row.hostname)}  encode zstd gzip
     if (!isDatabase || !isPostgresFamilyDatabase(dbType)) continue;
     if (controlPlaneHostname && row.hostname === controlPlaneHostname) continue;
 
-    addHostnameBlock(row.hostname, `${row.hostname} {
+    addHostnameBlock(
+      row.hostname,
+      `${row.hostname} {
 ${caddyTlsConfig(row.hostname)}  respond "Aeroplane ${dbType === "timescale" ? "TimescaleDB" : "Postgres"} is available on TCP ${row.hostPort}." 200
-}`);
+}`,
+    );
   }
 
   if (blocks.length === 0) {
@@ -148,7 +199,12 @@ ${caddyTlsConfig(row.hostname)}  respond "Aeroplane ${dbType === "timescale" ? "
 }`);
   }
 
-  return [`# Managed by Aeroplane. Manual changes may be overwritten.`, ...blocks].join("\n\n") + "\n";
+  return (
+    [
+      `# Managed by Aeroplane. Manual changes may be overwritten.`,
+      ...blocks,
+    ].join("\n\n") + "\n"
+  );
 }
 
 export async function writeAndReloadCaddy() {
@@ -174,7 +230,7 @@ export async function writeAndReloadCaddy() {
     child.on("close", (code) => {
       resolve({
         ok: code === 0,
-        detail: caddyReloadDetail(output, code)
+        detail: caddyReloadDetail(output, code),
       });
     });
   });

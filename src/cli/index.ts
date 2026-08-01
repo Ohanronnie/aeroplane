@@ -17,6 +17,7 @@ function help() {
   console.log(`Aeroplane CLI
 
 Usage:
+  aeroplane run <repository> [options]        # aeroplane.json / Compose
   aeroplane run <repository> expose <port> [options]
   aeroplane run <repository> --expose <port> [options]
   aeroplane status [service]
@@ -128,21 +129,48 @@ async function runCommand(args: string[]) {
   let exposedPort = parsed.values.expose;
   if (!exposedPort && parsed.positionals[1] === "expose")
     exposedPort = parsed.positionals[2];
+  const repository = parseRepository(repositoryInput);
+  const branch = parsed.values.branch ?? "main";
+  const githubToken = process.env.AEROPLANE_GITHUB_TOKEN;
+  let composeManifest: unknown;
+  if (repository.fullName) {
+    const response = await fetch(
+      `https://api.github.com/repos/${repository.fullName}/contents/aeroplane.json?ref=${encodeURIComponent(branch)}`,
+      {
+        headers: {
+          Accept: "application/vnd.github.raw+json",
+          "User-Agent": "aeroplane-cli",
+          ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+        },
+      },
+    );
+    if (response.ok) composeManifest = await response.json();
+    else if (response.status !== 404)
+      throw new Error(
+        `Could not read aeroplane.json from GitHub: HTTP ${response.status}`,
+      );
+  }
   const internalPort = Number(exposedPort);
   if (
-    !Number.isInteger(internalPort) ||
-    internalPort < 1 ||
-    internalPort > 65535
+    composeManifest === undefined &&
+    (!Number.isInteger(internalPort) ||
+      internalPort < 1 ||
+      internalPort > 65535)
   ) {
     throw new Error(
-      "Use 'expose <port>' or '--expose <port>' with a valid TCP port",
+      "Repository has no aeroplane.json; use 'expose <port>' or '--expose <port>'",
     );
   }
 
-  const repository = parseRepository(repositoryInput);
   const serviceName = parsed.values.name ?? repository.defaultName;
-  const projectName = parsed.values.project ?? repository.defaultName;
-  const branch = parsed.values.branch ?? "main";
+  const manifestProject =
+    composeManifest &&
+    typeof composeManifest === "object" &&
+    "project" in composeManifest
+      ? String((composeManifest as { project: unknown }).project)
+      : undefined;
+  const projectName =
+    parsed.values.project ?? manifestProject ?? repository.defaultName;
   const api = await clientFor(parsed.values);
 
   const projects = await api.projects();
@@ -163,9 +191,10 @@ async function runCommand(args: string[]) {
     repoUrl: repository.url,
     branch,
     runtimeMode: "web",
-    internalPort,
+    internalPort: composeManifest === undefined ? internalPort : 3000,
   };
-  const githubToken = process.env.AEROPLANE_GITHUB_TOKEN;
+  if (composeManifest !== undefined)
+    serviceInput.composeManifest = composeManifest;
   if (githubToken) serviceInput.githubToken = githubToken;
 
   if (service) {
