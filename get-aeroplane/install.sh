@@ -155,6 +155,7 @@ write_env_file() {
   env_file="$INSTALL_DIR/.env"
   secret_key="$(get_env_value "$env_file" AEROPLANE_SECRET_KEY)"
   local_cli_token="$(get_env_value "$env_file" AEROPLANE_LOCAL_CLI_TOKEN)"
+  github_webhook_secret="$(get_env_value "$env_file" GITHUB_WEBHOOK_SECRET)"
   public_url="$(get_env_value "$env_file" PUBLIC_URL)"
   control_plane_hostname="$(get_env_value "$env_file" CONTROL_PLANE_HOSTNAME)"
 
@@ -164,13 +165,16 @@ write_env_file() {
   if [ -z "$local_cli_token" ]; then
     local_cli_token="$(random_secret)"
   fi
+  if [ -z "$github_webhook_secret" ]; then
+    github_webhook_secret="$(random_secret)"
+  fi
   if [ -z "$public_url" ]; then
     public_url="$(detect_public_url)"
   fi
 
   tmp_file="$(mktemp)"
   if [ -f "$env_file" ]; then
-    grep -v -E '^(AEROPLANE_INSTALL_MODE|AEROPLANE_INSTALL_DIR|AEROPLANE_ENV_PATH|AEROPLANE_REPO_URL|AEROPLANE_REPO_BRANCH|AEROPLANE_IMAGE|AEROPLANE_IMAGE_UPDATE_CMD|AEROPLANE_UPDATE_REPO_URL|AEROPLANE_UPDATE_BRANCH|AEROPLANE_UPDATE_RESTART_CMD|AEROPLANE_SECRET_KEY|AEROPLANE_LOCAL_CLI_TOKEN|AEROPLANE_MANAGE_CADDY|DATA_DIR|DEPLOY_DRY_RUN|CADDY_CONFIG_PATH|CADDY_DATA_DIR|CADDY_RELOAD_CMD|PORT|HOST|PUBLIC_URL|CONTROL_PLANE_HOSTNAME|BUILDKIT_HOST|AEROPLANE_RUNTIME_NETWORK)=' "$env_file" > "$tmp_file" || true
+    grep -v -E '^(AEROPLANE_INSTALL_MODE|AEROPLANE_INSTALL_DIR|AEROPLANE_ENV_PATH|AEROPLANE_REPO_URL|AEROPLANE_REPO_BRANCH|AEROPLANE_IMAGE|AEROPLANE_IMAGE_UPDATE_CMD|AEROPLANE_UPDATE_REPO_URL|AEROPLANE_UPDATE_BRANCH|AEROPLANE_UPDATE_RESTART_CMD|AEROPLANE_SECRET_KEY|AEROPLANE_LOCAL_CLI_TOKEN|AEROPLANE_MANAGE_CADDY|GITHUB_WEBHOOK_SECRET|DATA_DIR|DEPLOY_DRY_RUN|CADDY_CONFIG_PATH|CADDY_DATA_DIR|CADDY_RELOAD_CMD|PORT|HOST|PUBLIC_URL|CONTROL_PLANE_HOSTNAME|BUILDKIT_HOST|AEROPLANE_RUNTIME_NETWORK)=' "$env_file" > "$tmp_file" || true
   else
     : > "$tmp_file"
   fi
@@ -187,6 +191,7 @@ AEROPLANE_UPDATE_RESTART_CMD="systemctl restart aeroplane"
 AEROPLANE_SECRET_KEY=$secret_key
 AEROPLANE_LOCAL_CLI_TOKEN=$local_cli_token
 AEROPLANE_MANAGE_CADDY=$MANAGE_CADDY
+GITHUB_WEBHOOK_SECRET=$github_webhook_secret
 DATA_DIR=$INSTALL_DIR/data
 DEPLOY_DRY_RUN=false
 CADDY_CONFIG_PATH=${AEROPLANE_CADDY_CONFIG_PATH:-$INSTALL_DIR/data/Caddyfile}

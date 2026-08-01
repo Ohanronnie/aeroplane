@@ -84,6 +84,14 @@ export class AeroplaneApi {
     ).deployment;
   }
 
+  async ensureGitHubWebhook(serviceId: string) {
+    return (
+      await this.request<{
+        webhook: { id: number; active: boolean; url: string };
+      }>(`/api/services/${serviceId}/github-webhook`, { method: "POST" })
+    ).webhook;
+  }
+
   async deployments(serviceId: string) {
     return (
       await this.request<{ deployments: Deployment[] }>(

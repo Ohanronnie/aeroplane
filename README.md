@@ -147,6 +147,12 @@ Create or update a service and deploy it:
 aeroplane run acme/api expose 3000
 ```
 
+Add `--watch` to register a GitHub push webhook. Set `AEROPLANE_GITHUB_TOKEN` for a repository-scoped PAT, or configure the host-level `GITHUB_ACCESS_TOKEN` in Aeroplane:
+
+```bash
+AEROPLANE_GITHUB_TOKEN=github_pat_... aeroplane run acme/api expose 3000 --watch
+```
+
 GitHub URLs and direct Git URLs are also accepted:
 
 ```bash

@@ -32,6 +32,15 @@ aeroplane run acme/api \
 
 Running the same command again updates the matching service instead of creating a duplicate.
 
+Use a GitHub PAT with repository webhook administration permission to deploy future pushes:
+
+```bash
+export AEROPLANE_GITHUB_TOKEN=github_pat_...
+aeroplane run acme/api --expose 3000 --watch
+```
+
+The CLI registers the repository webhook and exits after deployment. GitHub sends later push events directly to Aeroplane, so no watcher process or polling loop needs to remain active. When the host-level `GITHUB_ACCESS_TOKEN` is configured, the environment variable can be omitted.
+
 ## Inspect and deploy services
 
 ```bash

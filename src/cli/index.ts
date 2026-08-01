@@ -30,6 +30,7 @@ Run options:
   --branch <branch>   Git branch (defaults to main)
   --root <directory>  Repository subdirectory
   --start <command>   Start-command override
+  --watch             Deploy future pushes through a GitHub webhook
   --no-follow         Queue the deployment without following logs
 
 Connection options:
@@ -55,6 +56,7 @@ function parseCommandOptions(args: string[]) {
       branch: { type: "string" },
       root: { type: "string" },
       start: { type: "string" },
+      watch: { type: "boolean", default: false },
       follow: { type: "boolean", default: true },
       help: { type: "boolean", short: "h" },
     },
@@ -163,6 +165,8 @@ async function runCommand(args: string[]) {
     runtimeMode: "web",
     internalPort,
   };
+  const githubToken = process.env.AEROPLANE_GITHUB_TOKEN;
+  if (githubToken) serviceInput.githubToken = githubToken;
 
   if (service) {
     serviceInput.rootDir = parsed.values.root ?? null;
@@ -178,6 +182,16 @@ async function runCommand(args: string[]) {
   } else {
     service = await api.createService(project.id, serviceInput);
     console.log(`✓ Created service ${service.name}`);
+  }
+
+  if (parsed.values.watch) {
+    if (!repository.fullName) {
+      throw new Error("--watch requires a GitHub owner/name repository");
+    }
+    const webhook = await api.ensureGitHubWebhook(service.id);
+    console.log(
+      `✓ Watching ${repository.fullName}@${branch} with webhook ${webhook.id}`,
+    );
   }
 
   const deployment = await api.deploy(service.id);
