@@ -712,6 +712,7 @@ const updateServiceSchema = z.object({
   internalPort: z.coerce.number().int().min(1).max(65535).optional(),
   databasePublicEnabled: z.boolean().optional(),
   composeManifest: z.unknown().optional(),
+  env: z.array(envSchema).optional(),
   databasePublicHostname: publicHostnameSchema,
   postgresLogicalReplicationEnabled: z.boolean().optional(),
 });
@@ -3815,7 +3816,7 @@ app.patch("/api/services/:serviceId", async (c) => {
     return jsonError(body.error.issues[0]?.message ?? "Invalid update");
   }
 
-  const { dockerImage, composeManifest, ...updateData } = body.data;
+  const { dockerImage, composeManifest, env, ...updateData } = body.data;
   let repoFullName =
     updateData.repoFullName === undefined
       ? service.repoFullName
@@ -3888,6 +3889,28 @@ app.patch("/api/services/:serviceId", async (c) => {
       service.slug,
       normalizeRootDomain(getSystemSettings().rootDomain),
     );
+  }
+
+  if (env !== undefined) {
+    const timestamp = nowIso();
+    for (const entry of env) {
+      const normalizedValue = normalizeEnvValue(entry.value);
+      db.insert(envVars)
+        .values({
+          id: nanoid(10),
+          serviceId: service.id,
+          key: entry.key,
+          value: normalizedValue,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
+        .onConflictDoUpdate({
+          target: [envVars.serviceId, envVars.key],
+          set: { value: normalizedValue, updatedAt: timestamp },
+        })
+        .run();
+    }
+    syncDatabaseUrlEnvVar(service.id);
   }
 
   syncDatabaseUrlEnvVar(service.id);

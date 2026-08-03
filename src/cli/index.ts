@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { AeroplaneApi } from "./api-client.js";
 import { resolveConnection, saveConnection } from "./config.js";
 import { parseRepository } from "./repository.js";
+import { readEnvFile } from "./env-file.js";
 import type { Deployment, Project, Service } from "./types.js";
 
 const terminalStatuses = new Set([
@@ -31,6 +32,7 @@ Run options:
   --branch <branch>   Git branch (defaults to main)
   --root <directory>  Repository subdirectory
   --start <command>   Start-command override
+  --env-file <path>   Upload environment variables from a dotenv file
   --watch             Deploy future pushes through a GitHub webhook
   --no-follow         Queue the deployment without following logs
 
@@ -57,6 +59,7 @@ function parseCommandOptions(args: string[]) {
       branch: { type: "string" },
       root: { type: "string" },
       start: { type: "string" },
+      "env-file": { type: "string" },
       watch: { type: "boolean", default: false },
       follow: { type: "boolean", default: true },
       help: { type: "boolean", short: "h" },
@@ -132,6 +135,10 @@ async function runCommand(args: string[]) {
   const repository = parseRepository(repositoryInput);
   const branch = parsed.values.branch ?? "main";
   const githubToken = process.env.AEROPLANE_GITHUB_TOKEN;
+  const envEntries =
+    typeof parsed.values["env-file"] === "string"
+      ? readEnvFile(parsed.values["env-file"])
+      : undefined;
   let composeManifest: unknown;
   if (repository.fullName) {
     const response = await fetch(
@@ -195,6 +202,7 @@ async function runCommand(args: string[]) {
   };
   if (composeManifest !== undefined)
     serviceInput.composeManifest = composeManifest;
+  if (envEntries !== undefined) serviceInput.env = envEntries;
   if (githubToken) serviceInput.githubToken = githubToken;
 
   if (service) {
