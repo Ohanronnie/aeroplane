@@ -159,6 +159,25 @@ GitHub URLs and direct Git URLs are also accepted:
 aeroplane run https://github.com/acme/api --expose 3000 --branch main
 ```
 
+Upload local dotenv variables to the Aeroplane service without printing their
+values. The variables are stored as service variables and are available during
+builds and at runtime. Values already stored on the service but absent from the
+file are preserved:
+
+```bash
+aeroplane run acme/api expose 3000 --env-file .env.production
+```
+
+For a Compose repository with a root `aeroplane.json`, the same flag supplies
+variables to Compose interpolation and the deployment:
+
+```bash
+aeroplane run acme/shop --env-file .env.production --watch
+```
+
+Keep dotenv files containing secrets out of Git. Commit an `.env.example` with
+placeholder names instead.
+
 Useful follow-up commands:
 
 ```bash
